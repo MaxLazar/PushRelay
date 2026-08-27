@@ -1,0 +1,82 @@
+name: Web Flasher
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write   # attach .bin files to releases
+  pages: write      # deploy to GitHub Pages
+  id-token: write
+
+concurrency:
+  group: web-flasher
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ hashFiles('platformio.ini') }}
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Provide secrets.h (build-time fallback only)
+        run: cp include/secrets.h.example include/secrets.h
+
+      - name: Build firmware
+        run: pio run -e esp32-wrover-kit
+
+      - name: Build filesystem image
+        run: pio run -e esp32-wrover-kit -t buildfs
+
+      - name: Assemble site
+        run: |
+          set -e
+          BUILD=.pio/build/esp32-wrover-kit
+          mkdir -p site
+          cp web/index.html web/manifest.json site/
+          cp "$BUILD/bootloader.bin" "$BUILD/partitions.bin" "$BUILD/firmware.bin" "$BUILD/littlefs.bin" site/
+          cp "$(find ~/.platformio -name boot_app0.bin | head -1)" site/
+          ls -la site/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Attach firmware to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            site/bootloader.bin
+            site/partitions.bin
+            site/boot_app0.bin
+            site/firmware.bin
+            site/littlefs.bin
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

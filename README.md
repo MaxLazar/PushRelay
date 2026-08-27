@@ -27,7 +27,36 @@ limitations](#known-limitations) for open, non-blocking issues.
   have a Mac, pairing will complete but no notifications will ever arrive; use
   an iPhone instead.
 
-## Requirements
+## Install (web flasher)
+
+The quickest way to get firmware onto a device — **nothing to install on your
+computer.**
+
+1. Plug the ESP32 into your computer with a USB cable.
+2. Open **<https://maxlazar.github.io/PushRelay/>** in **Chrome or Edge on a
+   desktop** (Web Serial isn't available in Firefox or Safari, or on mobile).
+3. Click **Connect**, pick the serial port (shows up as `CP2102` /
+   `USB Serial`, or `COMx` on Windows), then **Install PushRelay** and confirm
+   the erase prompt. Flashing takes about a minute.
+4. The device reboots into the `PushRelay-Setup` Wi-Fi hotspot — continue with
+   [First boot — WiFi setup](#first-boot--wifi-setup).
+
+A brand-new, never-flashed ESP32 works fine: the chip's built-in ROM bootloader
+handles the first flash. If **Connect** finds no port, install the
+[CP210x USB-UART driver](https://www.silabs.com/developer-tools/usb-to-uart-bridge-vcp-drivers)
+(rarely needed on current Windows/macOS/Linux).
+
+The flasher page and firmware images are built and published automatically by
+the [`Web Flasher` GitHub Action](.github/workflows/flasher.yml); tagged
+releases (`v*`) also carry the raw `.bin` files as release assets.
+
+After the first flash, all further updates go [over the air](#updating-firmware) —
+no cable, and no web flasher needed.
+
+## Requirements (building from source)
+
+Only needed if you want to build the firmware yourself instead of using the
+[web flasher](#install-web-flasher) above.
 
 - [PlatformIO](https://platformio.org/) — either the VS Code extension or the `pio` CLI
 - An iPhone to pair with (source of notifications)
@@ -71,7 +100,10 @@ dropped noticeably (from ~2 MB to ~1.47 MB) after switching the BLE stack
 from the classic "ESP32 BLE Arduino" (Bluedroid) library to NimBLE-Arduino,
 which is also lighter-weight at runtime.
 
-## First-time setup
+## First-time setup (from source)
+
+Skip this if you flashed with the [web flasher](#install-web-flasher) — pick up
+at [First boot — WiFi setup](#first-boot--wifi-setup).
 
 1. **Clone and configure secrets**
 
@@ -164,6 +196,7 @@ The onboard LED (GPIO2) reports state at a glance:
 | Slow blink (1s) | Connecting — waiting for BLE pairing |
 | Solid on | BLE connected and ANCS ready |
 | Fast blink (200ms) | Error — WiFi lost |
+| Quick double-blink overlay | A notification was just forwarded successfully — plays over whatever the base pattern is, then resumes it |
 | Double blink | A notification was just forwarded successfully |
 
 ## Reliability

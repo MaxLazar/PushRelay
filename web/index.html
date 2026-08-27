@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Flash PushRelay</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%A1%3C/text%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --card: #ffffff;
+      --fg: #1c1f23;
+      --muted: #5b6470;
+      --border: #e3e6ea;
+      --accent: #2b6cb0;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #14171a;
+        --card: #1d2125;
+        --fg: #e8eaed;
+        --muted: #9aa4af;
+        --border: #2c3238;
+        --accent: #63b3ed;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      padding: 2rem 1rem 4rem;
+    }
+    main { width: 100%; max-width: 640px; }
+    h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
+    .sub { color: var(--muted); margin: 0 0 2rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+    .flash-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    ol { padding-left: 1.25rem; margin: .5rem 0 0; }
+    li { margin: .35rem 0; }
+    code {
+      background: rgba(128, 128, 128, .16);
+      padding: .1rem .35rem;
+      border-radius: 4px;
+      font-size: .9em;
+    }
+    a { color: var(--accent); }
+    .unsupported {
+      display: none;
+      border-color: #c05621;
+      background: rgba(192, 86, 33, .08);
+    }
+    .note { color: var(--muted); font-size: .9rem; }
+    esp-web-install-button { --esp-tools-button-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>📡 Flash PushRelay</h1>
+    <p class="sub">Install the PushRelay firmware onto an ESP32 straight from your browser — no software to install.</p>
+
+    <div class="card unsupported" id="unsupported">
+      <strong>This browser can't flash.</strong>
+      <p class="note">Web Serial is only available in Chrome, Edge, or another Chromium-based desktop browser. Open this page there and try again.</p>
+    </div>
+
+    <div class="card">
+      <div class="flash-row">
+        <esp-web-install-button manifest="./manifest.json"></esp-web-install-button>
+        <span class="note">ESP32-DevKitC / WROVER, 8&nbsp;MB flash</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <strong>How to flash</strong>
+      <ol>
+        <li>Connect the ESP32 to your computer with a USB cable.</li>
+        <li>Click <em>Connect</em> above and pick the serial port
+          (<code>CP2102</code> / <code>USB Serial</code>; on Windows it may be <code>COMx</code>).</li>
+        <li>Choose <em>Install PushRelay</em> and confirm the erase prompt. Flashing takes ~1&nbsp;minute.</li>
+        <li>When it finishes, the ESP32 reboots and starts the <code>PushRelay-Setup</code> Wi-Fi hotspot —
+          connect to it to configure Wi-Fi and your delivery provider.</li>
+      </ol>
+      <p class="note">A fresh, never-flashed ESP32 works fine — the chip's built-in ROM bootloader handles the first flash.
+        If <em>Connect</em> can't find a port, install the
+        <a href="https://www.silabs.com/developer-tools/usb-to-uart-bridge-vcp-drivers" target="_blank" rel="noopener">CP210x USB-UART driver</a>
+        (rarely needed on modern Windows/macOS/Linux).</p>
+    </div>
+
+    <p class="note">Firmware source: <a href="https://github.com/MaxLazar/PushRelay" target="_blank" rel="noopener">github.com/MaxLazar/PushRelay</a></p>
+  </main>
+
+  <script type="module" src="https://unpkg.com/esp-web-tools@10.0.3/dist/web/install-button.js?module"></script>
+  <script>
+    if (!('serial' in navigator)) {
+      document.getElementById('unsupported').style.display = 'block';
+    }
+  </script>
+</body>
+</html>
