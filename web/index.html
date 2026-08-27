@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Flash PushRelay</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%A1%3C/text%3E%3C/svg%3E" />
+  <title>PushRelay — install &amp; setup</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%94%94%3C/text%3E%3C/svg%3E" />
   <style>
     :root {
       --bg: #f6f7f9;
@@ -13,6 +13,8 @@
       --muted: #5b6470;
       --border: #e3e6ea;
       --accent: #2b6cb0;
+      --warn-bg: rgba(192, 86, 33, .08);
+      --warn-border: #c05621;
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -22,6 +24,8 @@
         --muted: #9aa4af;
         --border: #2c3238;
         --accent: #63b3ed;
+        --warn-bg: rgba(237, 137, 54, .1);
+        --warn-border: #dd6b20;
       }
     }
     * { box-sizing: border-box; }
@@ -29,38 +33,62 @@
       margin: 0;
       background: var(--bg);
       color: var(--fg);
-      font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       display: flex;
       justify-content: center;
-      padding: 2rem 1rem 4rem;
+      padding: 2.5rem 1rem 5rem;
     }
-    main { width: 100%; max-width: 640px; }
-    h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
-    .sub { color: var(--muted); margin: 0 0 2rem; }
+    main { width: 100%; max-width: 760px; }
+    h1 { font-size: 1.8rem; margin: 0 0 .3rem; }
+    h2 {
+      font-size: 1.15rem;
+      margin: 2.5rem 0 .75rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+    }
+    h2:first-of-type { border-top: 0; padding-top: 0; margin-top: 2rem; }
+    h3 { font-size: 1rem; margin: 1.25rem 0 .4rem; }
+    .lede { color: var(--muted); font-size: 1.05rem; margin: 0 0 1.5rem; }
     .card {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 1.5rem;
-      margin-bottom: 1.25rem;
+      padding: 1.4rem 1.5rem;
+      margin: 1rem 0;
     }
     .flash-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
-    ol { padding-left: 1.25rem; margin: .5rem 0 0; }
-    li { margin: .35rem 0; }
+    ol, ul { padding-left: 1.3rem; margin: .5rem 0; }
+    li { margin: .4rem 0; }
     code {
       background: rgba(128, 128, 128, .16);
       padding: .1rem .35rem;
       border-radius: 4px;
-      font-size: .9em;
+      font-size: .88em;
     }
     a { color: var(--accent); }
-    .unsupported {
-      display: none;
-      border-color: #c05621;
-      background: rgba(192, 86, 33, .08);
+    .note { color: var(--muted); font-size: .92rem; }
+    .warn {
+      border-color: var(--warn-border);
+      background: var(--warn-bg);
     }
-    .note { color: var(--muted); font-size: .9rem; }
-    esp-web-install-button { --esp-tools-button-color: var(--accent); }
+    .hidden { display: none; }
+    figure {
+      margin: 1rem 0;
+      text-align: center;
+    }
+    figure img {
+      max-width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    figure.phone img { max-width: 300px; }
+    figcaption { color: var(--muted); font-size: .88rem; margin-top: .5rem; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+    .grid figure img { max-width: 100%; }
     .fallback-btn {
       font: inherit;
       padding: .6rem 1.1rem;
@@ -70,82 +98,177 @@
       color: #fff;
       cursor: pointer;
     }
+    esp-web-install-button { --esp-tools-button-color: var(--accent); }
   </style>
 </head>
 <body>
   <main>
-    <h1>📡 Flash PushRelay</h1>
-    <p class="sub">Install the PushRelay firmware onto an ESP32 straight from your browser — no software to install.</p>
+    <h1>PushRelay</h1>
+    <p class="lede">Firmware for an ESP32 that relays your iPhone's notifications to your own push service.</p>
 
-    <div class="card unsupported" id="unsupported">
+    <h2>What it does</h2>
+    <p>
+      PushRelay turns a cheap ESP32 board into a bridge for iPhone notifications. It pairs with
+      your iPhone over Bluetooth the same way a smartwatch does, subscribes to
+      <strong>Apple's Notification Center</strong> (the ANCS protocol), and forwards every
+      notification — app name, title, body — over WiFi to a delivery service you choose:
+    </p>
+    <ul>
+      <li><strong>Bark</strong> — free iOS push app</li>
+      <li><strong>Pushover</strong> — cross-platform push service</li>
+      <li><strong>MQTT</strong> — publish to your own broker for home-automation use</li>
+    </ul>
+    <p>
+      It runs a small web admin UI for configuration, with an app allow-list, a Do&nbsp;Not&nbsp;Disturb
+      schedule, per-app priority, multiple recipients, a custom message format, and a recent-notifications
+      log. After the first USB flash, all further updates happen over WiFi (OTA) — no cable needed again.
+    </p>
+    <p class="note">
+      Hardware: an ESP32 board with 8&nbsp;MB flash (e.g. ESP32-DevKitC / WROVER-E), a USB cable for the
+      first flash, and an iPhone. ANCS is iOS-only in practice — a Mac will pair but never deliver notifications.
+    </p>
+
+    <h2>1. Flash the firmware</h2>
+    <p>Nothing to install on your computer. Use <strong>desktop Chrome or Edge</strong> — Web Serial isn't
+       available in Firefox, Safari, or on mobile.</p>
+
+    <div class="card warn hidden" id="unsupported">
       <strong>This browser can't flash.</strong>
-      <p class="note">Web Serial needs Chrome or Edge (desktop) served over HTTPS.
-        You're on <span id="ctx"></span>. Open
-        <a href="https://maxlazar.github.io/PushRelay/">the published page</a> in Chrome/Edge and try again.</p>
+      <p class="note">Web Serial needs Chrome or Edge on the desktop, served over HTTPS.
+        You're on <span id="ctx"></span>.</p>
     </div>
-
-    <div class="card unsupported" id="loadfail">
+    <div class="card warn hidden" id="loadfail">
       <strong>Flasher library didn't load.</strong>
       <p class="note">The <code>esp-web-tools</code> script was blocked or failed to fetch
-        (check the browser console / network tab). Try a hard reload, or a different network.</p>
+        (check the browser console). Try a hard reload or a different network.</p>
     </div>
 
     <div class="card">
       <div class="flash-row">
         <esp-web-install-button manifest="./manifest.json">
-          <button slot="activate" class="fallback-btn">Connect &amp; Install</button>
+          <button slot="activate" class="fallback-btn">Connect &amp; install</button>
           <span slot="unsupported" class="note">Web Serial not available — use desktop Chrome or Edge.</span>
           <span slot="not-allowed" class="note">Serial access was blocked (needs HTTPS).</span>
         </esp-web-install-button>
-        <span class="note">ESP32-DevKitC / WROVER, 8&nbsp;MB flash</span>
+        <span class="note">ESP32, 8&nbsp;MB flash</span>
       </div>
-    </div>
-
-    <div class="card">
-      <strong>How to flash</strong>
       <ol>
-        <li>Connect the ESP32 to your computer with a USB cable.</li>
-        <li>Click <em>Connect</em> above and pick the serial port
-          (<code>CP2102</code> / <code>USB Serial</code>; on Windows it may be <code>COMx</code>).</li>
-        <li>Choose <em>Install PushRelay</em> and confirm the erase prompt. Flashing takes ~1&nbsp;minute.</li>
-        <li>When it finishes, the ESP32 reboots and starts the <code>PushRelay-Setup</code> Wi-Fi hotspot —
-          connect to it to configure Wi-Fi and your delivery provider.</li>
+        <li>Plug the ESP32 into your computer with a USB cable.</li>
+        <li>Click <em>Connect &amp; install</em>, pick the serial port (<code>CP2102</code> /
+          <code>USB Serial</code>, or <code>COMx</code> on Windows).</li>
+        <li>Choose <em>Install PushRelay</em> and confirm the erase prompt. Flashing takes about a minute.</li>
       </ol>
-      <p class="note">A fresh, never-flashed ESP32 works fine — the chip's built-in ROM bootloader handles the first flash.
-        If <em>Connect</em> can't find a port, install the
+      <p class="note">A brand-new, never-flashed ESP32 is fine — the chip's built-in ROM bootloader handles
+        the first flash. If no port appears, install the
         <a href="https://www.silabs.com/developer-tools/usb-to-uart-bridge-vcp-drivers" target="_blank" rel="noopener">CP210x USB-UART driver</a>
-        (rarely needed on modern Windows/macOS/Linux).</p>
+        (rarely needed on current Windows/macOS/Linux). Close any other serial monitor (PlatformIO, Arduino IDE) first.</p>
     </div>
 
-    <p class="note">Firmware source: <a href="https://github.com/MaxLazar/PushRelay" target="_blank" rel="noopener">github.com/MaxLazar/PushRelay</a></p>
+    <h2>2. Connect it to WiFi</h2>
+    <p>Right after flashing, still on the flash page, the installer offers a <strong>WiFi setup</strong>
+       step over the USB cable: pick your network, enter the password, and when the ESP32 connects the
+       page shows a clickable <strong>Visit device</strong> link straight to its IP address
+       (<code>http://192.168.x.x</code>). That address is the admin UI — bookmark it.</p>
+
+    <h3>If the installer doesn't offer WiFi setup</h3>
+    <p>The ESP32 falls back to a captive portal. On your phone or laptop, join the
+      <code>PushRelay-Setup</code> WiFi network; a setup page opens automatically (or browse to
+      <code>192.168.4.1</code>). Tap <em>Configure WiFi</em>, choose your network, enter the password.
+      The device saves it and reboots onto your network.</p>
+    <figure class="phone">
+      <img src="images/pushrelay-wifimanager.png" alt="PushRelay-Setup captive portal with Configure WiFi, Info, Exit and Update buttons" />
+      <figcaption>The <code>PushRelay-Setup</code> captive portal — tap <em>Configure WiFi</em>.</figcaption>
+    </figure>
+    <p class="note">To find the IP later without the installer: keep the cable connected, click
+      <em>Logs &amp; Console</em> on the flash page, press the board's <code>EN</code>/<code>RST</code>
+      button, and watch for <code>WiFi connected: 192.168.…</code>. It's also on the admin UI's Home tab,
+      and the device answers at <code>http://pushrelay.local</code> on most networks.</p>
+
+    <h2>3. Pair with your iPhone</h2>
+    <ol>
+      <li>On the iPhone, open <strong>Settings → Bluetooth</strong>.</li>
+      <li><strong>PushRelay</strong> appears under <em>Other Devices</em>. Tap it.</li>
+      <li>Accept the pairing dialog. PushRelay asks for an <em>authenticated</em> bond, so you may get a
+        passkey confirmation — just accept it (the device auto-confirms its side).</li>
+      <li>Once paired it stays bonded across reboots, and notifications start flowing to your provider
+        automatically.</li>
+    </ol>
+    <p class="note"><strong>If Settings never lists PushRelay:</strong> some iOS versions don't show generic
+      BLE accessories there. Use a free BLE scanner app (e.g. <em>LightBlue</em>) to connect to
+      <code>PushRelay</code> once — that triggers the same system pairing dialog. It's a one-time step;
+      afterwards the device reconnects on its own.</p>
+    <p class="note"><strong>Bonded but no notifications ever arrive?</strong> Almost always a plain
+      ("Just Works") pairing instead of an authenticated one. Forget the device in iOS Bluetooth settings
+      and pair again.</p>
+
+    <h2>4. Choose a delivery provider</h2>
+    <p>Open the admin UI (the <em>Visit device</em> link, its IP, or <code>http://pushrelay.local</code>),
+       go to the <strong>Provider</strong> tab, pick Bark, Pushover, or MQTT, paste the credentials, and
+       press <em>Save</em>.</p>
+    <figure>
+      <img src="images/pushrelay-providers.png" alt="Provider tab: default provider dropdown, credential fields, recipients, and a message-format template" />
+      <figcaption>Provider tab — default provider, extra recipients, and a custom message template.</figcaption>
+    </figure>
+    <ul>
+      <li><strong>Bark:</strong> install the Bark iOS app, copy its <em>device key</em> (not a server key),
+        paste it in.</li>
+      <li><strong>Pushover:</strong> create an Application for an <em>app token</em>, and use your
+        account <em>user key</em>.</li>
+      <li><strong>MQTT:</strong> set broker host, port, topic; optional username/password and TLS. Each
+        notification is published as JSON.</li>
+    </ul>
+
+    <h2>The admin UI</h2>
+    <div class="grid">
+      <figure>
+        <img src="images/pushrelay-homepage.png" alt="Home tab showing BLE and Notification Center status, WiFi IP and signal, uptime, firmware version, and statistics" />
+        <figcaption><strong>Home</strong> — live status, the device IP, and statistics.</figcaption>
+      </figure>
+      <figure>
+        <img src="images/pushrelay-filters.png" alt="Filters tab with app allow-list, Do Not Disturb window, per-app priority, and backlog filtering" />
+        <figcaption><strong>Filters</strong> — app allow-list, Do&nbsp;Not&nbsp;Disturb, per-app priority.</figcaption>
+      </figure>
+      <figure>
+        <img src="images/pushrelay-log.png" alt="Log tab listing recent notifications relayed from Notification Center with delivery status" />
+        <figcaption><strong>Log</strong> — the last 20 notifications and how each was delivered.</figcaption>
+      </figure>
+    </div>
+    <p class="note"><strong>Do&nbsp;Not&nbsp;Disturb hours are UTC</strong> — the device syncs time via NTP
+      with no timezone offset, so convert your local window. The backlog filter stops a reconnect from
+      re-forwarding your whole Notification Center; set the phone timezone offset on the Filters tab to
+      make it exact.</p>
+
+    <h2>Updating later</h2>
+    <p>No cable needed after the first flash. From the admin UI or your build tools, push new firmware
+      over WiFi (OTA), protected by the <code>OTA_PASSWORD</code> you set at build time. Reflashing does
+      not erase your WiFi credentials, provider keys, or the iPhone bond.</p>
+
+    <p class="note" style="margin-top:2.5rem">
+      Source &amp; full docs: <a href="https://github.com/MaxLazar/PushRelay" target="_blank" rel="noopener">github.com/MaxLazar/PushRelay</a>
+    </p>
   </main>
 
   <script>
-    // Diagnostics: show *why* the button might be missing.
     var secure = window.isSecureContext;
     var hasSerial = 'serial' in navigator;
     document.getElementById('ctx').textContent =
       location.protocol + '//' + location.host + (secure ? ' (secure)' : ' (NOT a secure context)');
-    if (!hasSerial || !secure) {
-      document.getElementById('unsupported').style.display = 'block';
-    }
-    // If the custom element never upgrades, the library failed to load.
+    if (!hasSerial || !secure) document.getElementById('unsupported').classList.remove('hidden');
     window.addEventListener('load', function () {
       setTimeout(function () {
-        if (!(customElements.get('esp-web-install-button'))) {
-          document.getElementById('loadfail').style.display = 'block';
+        if (!customElements.get('esp-web-install-button')) {
+          document.getElementById('loadfail').classList.remove('hidden');
         }
       }, 3000);
     });
   </script>
   <script type="module"
           src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"
-          onerror="document.getElementById('loadfail').style.display='block'"></script>
+          onerror="document.getElementById('loadfail').classList.remove('hidden')"></script>
   <script type="module">
-    // Fallback CDN if unpkg is unreachable.
     if (!customElements.get('esp-web-install-button')) {
       import('https://cdn.jsdelivr.net/npm/esp-web-tools@10/dist/web/install-button.js')
-        .catch(function () { document.getElementById('loadfail').style.display = 'block'; });
+        .catch(function () { document.getElementById('loadfail').classList.remove('hidden'); });
     }
   </script>
 </body>

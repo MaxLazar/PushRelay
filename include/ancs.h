@@ -61,27 +61,102 @@ enum AncsNotificationAttributeId : uint8_t {
 static const uint16_t ANCS_MAX_TITLE_LEN = 32;
 static const uint16_t ANCS_MAX_MESSAGE_LEN = 128;
 
-// Maps well-known bundle identifiers to a human-readable app name.
+// Derives a readable app name from a reverse-DNS bundle identifier when it is
+// not in the well-known map, e.g. "com.microsoft.Office.Outlook" -> "Outlook",
+// "com.apple.MobileSMS" -> "SMS", "ph.telegra.Telegraph" -> "Telegraph".
+inline String ancsNormalizeBundleId(const String& bundleId) {
+    // Split on '.' and walk backwards for the first meaningful segment,
+    // skipping generic tail words that carry no product identity.
+    static const char* kGenericSegments[] = {
+        "app", "ios", "iphone", "ipad", "mobile", "client", "inc", "llc",
+    };
+
+    int end = bundleId.length();
+    while (end > 0) {
+        int start = bundleId.lastIndexOf('.', end - 1);
+        String segment = bundleId.substring(start + 1, end);
+        end = start;
+
+        if (segment.length() == 0) {
+            continue;
+        }
+
+        bool generic = false;
+        for (const char* g : kGenericSegments) {
+            if (segment.equalsIgnoreCase(g)) {
+                generic = true;
+                break;
+            }
+        }
+        if (generic && start > 0) {
+            continue; // try the next segment up
+        }
+
+        // Trim a common "Mobile" prefix ("MobileSMS" -> "SMS").
+        if (segment.length() > 6 && segment.startsWith("Mobile")) {
+            segment = segment.substring(6);
+        }
+
+        // Capitalise the first letter; leave the rest as the vendor wrote it
+        // so existing camel case ("FaceTime", "WhatsApp") survives.
+        if (segment[0] >= 'a' && segment[0] <= 'z') {
+            segment.setCharAt(0, segment[0] - ('a' - 'A'));
+        }
+        return segment;
+    }
+
+    return bundleId;
+}
+
+// Maps well-known bundle identifiers to a human-readable app name, falling back
+// to a normalized form derived from the bundle ID itself.
 inline String ancsFriendlyAppName(const String& bundleId) {
     static const std::map<String, String> kKnownApps = {
+        // Apple stock apps
         {"com.apple.MobileSMS", "Messages"},
         {"com.apple.mobilephone", "Phone"},
         {"com.apple.mobilemail", "Mail"},
         {"com.apple.facetime", "FaceTime"},
         {"com.apple.calendar", "Calendar"},
+        {"com.apple.mobilecal", "Calendar"},
+        {"com.apple.reminders", "Reminders"},
+        // Team chat / collaboration
         {"com.microsoft.teams", "Teams"},
         {"com.microsoft.skype.teams", "Teams"},
+        {"com.tinyspeck.chatlyio", "Slack"},
+        {"com.hammerandchisel.discord", "Discord"},
+        {"com.google.dynamite", "Google Chat"},
+        {"com.microsoft.skype.teams.disp", "Teams"},
+        // Messengers
         {"net.whatsapp.WhatsApp", "WhatsApp"},
         {"ph.telegra.Telegraph", "Telegram"},
-        {"com.tinyspeck.chatlyio", "Slack"},
+        {"org.whispersystems.signal", "Signal"},
         {"com.facebook.Messenger", "Messenger"},
+        {"com.toyopagroup.picaboo", "Snapchat"},
+        {"jp.naver.line", "LINE"},
+        {"com.viber", "Viber"},
+        {"com.skype.skype", "Skype"},
+        {"com.tencent.xin", "WeChat"},
+        {"com.google.GVDialer", "Google Voice"},
+        // Mail
+        {"com.microsoft.Office.Outlook", "Outlook"},
         {"com.google.Gmail", "Gmail"},
+        {"com.readdle.smartemail", "Spark"},
+        // Video calls
+        {"us.zoom.videomeetings", "Zoom"},
+        {"com.google.Meet", "Google Meet"},
+        {"com.webex.meeting", "Webex"},
+        // Social
+        {"com.atebits.Tweetie2", "X"},
+        {"com.burbn.instagram", "Instagram"},
+        {"com.facebook.Facebook", "Facebook"},
+        {"com.reddit.Reddit", "Reddit"},
     };
     auto it = kKnownApps.find(bundleId);
     if (it != kKnownApps.end()) {
         return it->second;
     }
-    return bundleId; // fall back to the raw bundle ID when unknown
+    return ancsNormalizeBundleId(bundleId);
 }
 
 class AncsManager {

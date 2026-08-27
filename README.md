@@ -38,13 +38,23 @@ computer.**
 3. Click **Connect**, pick the serial port (shows up as `CP2102` /
    `USB Serial`, or `COMx` on Windows), then **Install PushRelay** and confirm
    the erase prompt. Flashing takes about a minute.
-4. The device reboots into the `PushRelay-Setup` Wi-Fi hotspot — continue with
+4. When prompted, enter your Wi-Fi network and password. The firmware
+   implements [Improv Serial](https://www.improv-wifi.com/serial/), so the
+   flasher provisions Wi-Fi over the USB cable and then shows a clickable
+   **Visit device** link straight to the device's IP
+   (`http://192.168.x.x`) — that's the admin UI.
+5. If the flasher doesn't offer Wi-Fi setup, the device falls back to the
+   `PushRelay-Setup` captive portal instead — see
    [First boot — WiFi setup](#first-boot--wifi-setup).
 
 A brand-new, never-flashed ESP32 works fine: the chip's built-in ROM bootloader
 handles the first flash. If **Connect** finds no port, install the
 [CP210x USB-UART driver](https://www.silabs.com/developer-tools/usb-to-uart-bridge-vcp-drivers)
 (rarely needed on current Windows/macOS/Linux).
+
+To read the device's IP off the cable at any time: keep it connected, click
+**Logs & Console** on the flasher page, press the board's `EN`/`RST` button,
+and watch for `[Main] WiFi connected: 192.168.…`.
 
 The flasher page and firmware images are built and published automatically by
 the [`Web Flasher` GitHub Action](.github/workflows/flasher.yml); tagged

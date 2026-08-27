@@ -19,6 +19,7 @@
 #include "led.h"
 #include "stats.h"
 #include "notiflog.h"
+#include "improv.h"
 
 // Reboot if the BLE link to the phone stays down this long — recovers from a
 // stuck BLE/ANCS stack without needing a manual power cycle.
@@ -30,7 +31,53 @@ static WebAdmin webAdmin;
 static LedIndicator led;
 static Stats stats;
 static NotificationLog notifLog;
+static ImprovSerial improv;
 static uint32_t lastBleOkMillis = 0;
+
+// Returns true if the STA interface already has WiFi credentials stored in NVS
+// (i.e. this isn't a fresh device) — used to let stored credentials win the
+// boot race before we offer the Improv-serial provisioning form.
+static bool hasStoredWifiCredentials() {
+    wifi_config_t conf;
+    if (esp_wifi_get_config(WIFI_IF_STA, &conf) != ESP_OK) return false;
+    return conf.sta.ssid[0] != '\0';
+}
+
+// Brings WiFi up. Tries stored credentials first; while that races, services
+// Improv-serial so the browser flasher can push credentials over USB and get a
+// clickable device URL back. Falls back to the WiFiManager captive portal only
+// if neither path connects.
+static void connectWifi() {
+    improv.begin(APP_NAME, FIRMWARE_VERSION, BLE_DEVICE_NAME);
+
+    WiFi.mode(WIFI_STA);
+    const bool haveCreds = hasStoredWifiCredentials();
+    if (haveCreds) WiFi.begin();   // reconnect with NVS-stored credentials
+
+    const uint32_t start = millis();
+    while (WiFi.status() != WL_CONNECTED) {
+        const uint32_t waited = millis() - start;
+        // Give stored credentials a ~5s head start before answering Improv
+        // state queries (which would otherwise pop the "enter WiFi" form in
+        // the flasher even though we're seconds from connecting).
+        if (!haveCreds || waited > 5000) improv.loop();
+
+        if (improv.isConnected()) return;                    // provisioned over serial
+        if (!improv.sawTraffic() && waited > (haveCreds ? 12000 : 6000)) break;
+        if (waited > 90000) break;                           // hard cap
+        delay(10);
+    }
+
+    if (WiFi.status() != WL_CONNECTED) {
+        WiFiManager wm;
+        wm.setConfigPortalTimeout(WIFI_SETUP_TIMEOUT_SEC);
+        if (!wm.autoConnect(WIFI_SETUP_AP_NAME)) {
+            Serial.printf("[Main] WiFi setup timed out, rebooting\n");
+            ESP.restart();
+        }
+    }
+    improv.setConnected(WiFi.localIP());
+}
 
 // Sends one notification to a single recipient.
 static bool sendToRecipient(const Recipient& r, const Notification& n, const String& priority) {
@@ -126,13 +173,9 @@ void setup() {
     led.begin();
     led.setState(LedState::Connecting);
 
-    // 1. WiFi via WiFiManager — opens a captive portal on first boot / bad credentials.
-    WiFiManager wm;
-    wm.setConfigPortalTimeout(WIFI_SETUP_TIMEOUT_SEC);
-    if (!wm.autoConnect(WIFI_SETUP_AP_NAME)) {
-        Serial.printf("[Main] WiFi setup timed out, rebooting\n");
-        ESP.restart();
-    }
+    // 1. WiFi: stored credentials, then Improv-serial (browser flasher over
+    //    USB), then the WiFiManager captive portal as a last resort.
+    connectWifi();
     Serial.printf("[Main] WiFi connected: %s\n", WiFi.localIP().toString().c_str());
 
     // ESP32 has a single 2.4GHz radio shared by WiFi and Bluetooth via
@@ -190,6 +233,7 @@ void loop() {
     ancs.loop();
     ArduinoOTA.handle();
     led.update();
+    improv.loop();   // keep answering Improv state queries (flasher reopened, etc.)
 
     // BLE-specific recovery: reboot if disconnected too long, independent of the
     // generic task watchdog (which only catches a fully hung loop).

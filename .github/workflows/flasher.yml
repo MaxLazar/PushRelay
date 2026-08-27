@@ -55,7 +55,7 @@ jobs:
           set -e
           BUILD=.pio/build/esp32-wrover-kit
           mkdir -p site
-          cp web/index.html web/manifest.json site/
+          cp -r web/. site/
           cp "$BUILD/bootloader.bin" "$BUILD/partitions.bin" "$BUILD/firmware.bin" "$BUILD/littlefs.bin" site/
           cp "$(find ~/.platformio -name boot_app0.bin | head -1)" site/
           ls -la site/
