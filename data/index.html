@@ -130,6 +130,11 @@
   .tab-btn.active { color: var(--ix-primary); border-bottom-color: var(--ix-primary); }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
+
+  footer { text-align: center; font-size: 0.6875rem; color: var(--ix-text-weak); padding: var(--ix-space-lg) 0 var(--ix-space-sm); line-height: 1.6; }
+  footer a { color: var(--ix-text-soft); text-decoration: none; }
+  footer a:hover { color: var(--ix-primary); text-decoration: underline; }
+  footer .sep { margin: 0 0.35rem; }
 </style>
 </head>
 <body>
@@ -271,6 +276,17 @@
     <button id="saveBtn">Save</button>
     <div id="saveMsg"></div>
   </div>
+
+  <footer>
+    <div>PushRelay <span id="footerVersion">v?</span> · <span id="footerSize">? KB</span></div>
+    <div>
+      Oleg Abramov · <a href="mailto:oleg@abramov.dev">oleg@abramov.dev</a>
+      <span class="sep">·</span>
+      <a href="https://github.com/MaxLazar/PushRelay" target="_blank" rel="noopener">GitHub</a>
+      <span class="sep">·</span>
+      <span id="footerYear">2026</span>
+    </div>
+  </footer>
 
   <script>
     const providerSelect = document.getElementById('provider');
@@ -486,6 +502,14 @@
 
     document.getElementById('refreshLogBtn').addEventListener('click', loadLog);
 
+    async function loadFooter() {
+      document.getElementById('footerYear').textContent = new Date().getFullYear();
+      const res = await fetch('/api/ota-status');
+      const s = await res.json();
+      document.getElementById('footerVersion').textContent = 'v' + s.firmwareVersion;
+      document.getElementById('footerSize').textContent = (s.sketchSize / 1024).toFixed(0) + ' KB app';
+    }
+
     providerSelect.addEventListener('change', () => showFieldsFor(providerSelect.value));
 
     document.getElementById('saveBtn').addEventListener('click', async () => {
@@ -547,6 +571,7 @@
     loadStatus();
     loadStats();
     loadLog();
+    loadFooter();
   </script>
 </body>
 </html>

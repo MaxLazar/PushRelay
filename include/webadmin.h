@@ -308,6 +308,8 @@ public:
             doc["buildDate"] = FIRMWARE_BUILD_DATE;
             doc["hostname"] = MDNS_HOSTNAME;
             doc["freeHeap"] = ESP.getFreeHeap();
+            doc["sketchSize"] = ESP.getSketchSize();
+            doc["sketchSpace"] = ESP.getSketchSize() + ESP.getFreeSketchSpace();
             String out;
             serializeJson(doc, out);
             sendJson(request, 200, out);
