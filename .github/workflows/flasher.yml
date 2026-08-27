@@ -3,11 +3,10 @@ name: Web Flasher
 on:
   push:
     branches: [main]
-    tags: ['v*']
   workflow_dispatch:
 
 permissions:
-  contents: write   # attach .bin files to releases
+  contents: write   # create tags/releases, attach .bin files
   pages: write      # deploy to GitHub Pages
   id-token: write
 
@@ -18,8 +17,40 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.filter.outputs.firmware }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # version.txt commit-distance needs full history
+
+      # Only cut a release when something that ends up in the firmware or the
+      # filesystem image actually changed. Doc-only pushes still redeploy Pages.
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            firmware:
+              - 'src/**'
+              - 'include/**'
+              - 'data/**'
+              - 'platformio.ini'
+              - 'version.txt'
+              - 'scripts/**'
+
+      - name: Compute version
+        id: version
+        run: |
+          set -e
+          BASE=$(cat version.txt)
+          LAST=$(git log -1 --format=%H -- version.txt || true)
+          if [ -n "$LAST" ]; then RANGE="$LAST..HEAD"; else RANGE="HEAD"; fi
+          PATCH=$(git rev-list --count $RANGE)
+          VERSION="$BASE.$PATCH"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "PUSHRELAY_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "PushRelay version: $VERSION"
 
       - uses: actions/setup-python@v5
         with:
@@ -60,16 +91,45 @@ jobs:
           cp "$(find ~/.platformio -name boot_app0.bin | head -1)" site/
           ls -la site/
 
+      - name: Build update manifest
+        run: |
+          set -e
+          BUILD=.pio/build/esp32-wrover-kit
+          jq -n \
+            --arg version "${{ steps.version.outputs.version }}" \
+            --arg sha "$(git rev-parse --short HEAD)" \
+            --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg notes "$(git log -1 --pretty=%s)" \
+            --arg fw_sha "$(sha256sum "$BUILD/firmware.bin" | cut -d' ' -f1)" \
+            --argjson fw_size "$(stat -c%s "$BUILD/firmware.bin")" \
+            --arg fs_sha "$(sha256sum "$BUILD/littlefs.bin" | cut -d' ' -f1)" \
+            --argjson fs_size "$(stat -c%s "$BUILD/littlefs.bin")" \
+            '{version:$version, sha:$sha, date:$date, notes:$notes, min_version:"0.0.0",
+              firmware:{path:"firmware.bin", sha256:$fw_sha, size:$fw_size},
+              filesystem:{path:"littlefs.bin", sha256:$fs_sha, size:$fs_size}}' \
+            > site/manifest.json
+          cat site/manifest.json
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
-      - name: Attach firmware to release
-        if: startsWith(github.ref, 'refs/tags/')
+      # Immutable per-version copy of everything, for humans and for rollback.
+      # The device itself updates from the Pages copies above (no redirects, no
+      # API rate limit); these assets are the archive.
+      - name: Publish release
+        if: steps.filter.outputs.firmware == 'true'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          body: |
+            Automated build of `${{ github.sha }}`.
+
+            ${{ github.event.head_commit.message }}
           files: |
+            site/manifest.json
             site/bootloader.bin
             site/partitions.bin
             site/boot_app0.bin

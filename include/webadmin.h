@@ -14,6 +14,7 @@
 #include "version.h"
 #include "stats.h"
 #include "notiflog.h"
+#include "otaupdate.h"
 
 // One delivery target for a forwarded notification. `type` is "bark" |
 // "pushover" | "mqtt" (only "bark" actually delivers before Phase 4).
@@ -186,11 +187,12 @@ public:
     // `ancsReadyFn` let the status endpoint report live BLE state; `stats` backs
     // the /api/stats endpoint; `notifLog` backs /api/log.
     void begin(std::function<bool()> peerConnected, std::function<bool()> ancsReady, Stats* statsPtr,
-               NotificationLog* notifLogPtr) {
+               NotificationLog* notifLogPtr, OtaUpdater* otaPtr) {
         peerConnectedFn = peerConnected;
         ancsReadyFn = ancsReady;
         stats = statsPtr;
         notifLog = notifLogPtr;
+        ota = otaPtr;
 
         if (!LittleFS.begin(true)) {
             Serial.printf("[WebAdmin] LittleFS mount failed\n");
@@ -330,17 +332,47 @@ public:
             sendJson(request, 200, out);
         });
 
-        server.on("/api/ota-status", HTTP_GET, [](AsyncWebServerRequest* request) {
+        server.on("/api/ota-status", HTTP_GET, [this](AsyncWebServerRequest* request) {
             JsonDocument doc;
             doc["firmwareVersion"] = FIRMWARE_VERSION;
+            doc["gitSha"] = FIRMWARE_GIT_SHA;
             doc["buildDate"] = FIRMWARE_BUILD_DATE;
             doc["hostname"] = MDNS_HOSTNAME;
             doc["freeHeap"] = ESP.getFreeHeap();
             doc["sketchSize"] = ESP.getSketchSize();
             doc["sketchSpace"] = ESP.getSketchSize() + ESP.getFreeSketchSpace();
+            if (ota) {
+                JsonObject u = doc["update"].to<JsonObject>();
+                u["phase"] = OtaUpdater::phaseName(ota->phase());
+                u["latestVersion"] = ota->latestVersion();
+                u["updateAvailable"] = ota->updateAvailable();
+                u["notes"] = ota->releaseNotes();
+                u["progress"] = ota->progress();
+                u["stage"] = ota->stage();
+                u["error"] = ota->error();
+            }
             String out;
             serializeJson(doc, out);
             sendJson(request, 200, out);
+        });
+
+        // Both queue a command for the main loop (see OtaUpdater::loop) and
+        // return immediately — the network work must never run in this async
+        // handler. The admin page polls /api/ota-status for progress.
+        server.on("/api/ota-check", HTTP_POST, [this](AsyncWebServerRequest* request) {
+            if (!ota) { sendJson(request, 503, "{\"error\":\"unavailable\"}"); return; }
+            ota->requestCheck();
+            sendJson(request, 202, "{\"status\":\"checking\"}");
+        });
+
+        server.on("/api/ota-apply", HTTP_POST, [this](AsyncWebServerRequest* request) {
+            if (!ota) { sendJson(request, 503, "{\"error\":\"unavailable\"}"); return; }
+            if (!ota->updateAvailable()) {
+                sendJson(request, 409, "{\"error\":\"no update available\"}");
+                return;
+            }
+            ota->requestApply();
+            sendJson(request, 202, "{\"status\":\"applying\"}");
         });
 
         // Registered last so it never shadows the /api/* routes above — ESPAsyncWebServer
@@ -361,4 +393,5 @@ private:
     std::function<bool()> ancsReadyFn;
     Stats* stats = nullptr;
     NotificationLog* notifLog = nullptr;
+    OtaUpdater* ota = nullptr;
 };

@@ -20,6 +20,7 @@
 #include "stats.h"
 #include "notiflog.h"
 #include "improv.h"
+#include "otaupdate.h"
 
 // Reboot if the BLE link to the phone stays down this long — recovers from a
 // stuck BLE/ANCS stack without needing a manual power cycle.
@@ -32,6 +33,7 @@ static LedIndicator led;
 static Stats stats;
 static NotificationLog notifLog;
 static ImprovSerial improv;
+static OtaUpdater otaUpdater;
 static uint32_t lastBleOkMillis = 0;
 
 // Returns true if the STA interface already has WiFi credentials stored in NVS
@@ -198,6 +200,8 @@ void setup() {
     configTime(0, 0, "pool.ntp.org");
 
     // 4. OTA updates — no USB cable needed after this first flash.
+    //    Two independent paths: ArduinoOTA (developer push from `pio`), and the
+    //    OtaUpdater "pull" path driven from the admin UI (GitHub releases).
     ArduinoOTA.setHostname(MDNS_HOSTNAME);
     ArduinoOTA.setPassword(OTA_PASSWORD);
     ArduinoOTA.onStart([]() { Serial.printf("[OTA] Update starting\n"); });
@@ -211,7 +215,8 @@ void setup() {
         []() { return ancs.isPeerConnected(); },
         []() { return ancs.isAncsReady(); },
         &stats,
-        &notifLog);
+        &notifLog,
+        &otaUpdater);
 
     // 6. Start advertising for ANCS and wire up the notification callback.
     ancs.begin(BLE_DEVICE_NAME, onAncsNotification);
@@ -232,6 +237,7 @@ void loop() {
 
     ancs.loop();
     ArduinoOTA.handle();
+    otaUpdater.loop();   // runs a queued admin-UI update check / install
     led.update();
     improv.loop();   // keep answering Improv state queries (flasher reopened, etc.)
 

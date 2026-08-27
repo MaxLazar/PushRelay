@@ -173,6 +173,16 @@
     </div>
 
     <div class="card">
+      <h2>Firmware update</h2>
+      <div class="row"><span>Installed</span><span id="otaInstalled">—</span></div>
+      <div class="row"><span>Latest</span><span id="otaLatest">—</span></div>
+      <div id="otaNotes" class="subtitle" style="margin: 0.35rem 0 0;"></div>
+      <div id="otaMsg" style="font-size: 0.75rem; color: var(--ix-text-soft); min-height: 1rem; margin-top: 0.35rem;"></div>
+      <button class="secondary" id="otaCheckBtn" type="button" style="margin-top: 0.5rem;">Check for updates</button>
+      <button id="otaApplyBtn" class="hidden" type="button">Install update</button>
+    </div>
+
+    <div class="card">
       <h2>Statistics</h2>
       <div class="row"><span>Received</span><span id="statReceived">—</span></div>
       <div class="row"><span>Forwarded</span><span id="statForwarded">—</span></div>
@@ -612,13 +622,76 @@
 
     document.getElementById('refreshLogBtn').addEventListener('click', loadLog);
 
-    async function loadFooter() {
+    const OTA_PHASE_LABELS = {
+      idle: '',
+      checking: 'Checking GitHub…',
+      up_to_date: 'Running the latest version.',
+      update_available: 'An update is available.',
+      downloading: 'Downloading…',
+      applying: 'Writing update, the device will reboot…',
+      error: 'Update failed.',
+    };
+    let otaPollTimer = null;
+
+    async function loadOta() {
       document.getElementById('footerYear').textContent = new Date().getFullYear();
-      const res = await fetch('/api/ota-status');
-      const s = await res.json();
+      let s;
+      try {
+        s = await (await fetch('/api/ota-status')).json();
+      } catch (e) {
+        // Fetch fails while the device reboots after applying an update.
+        document.getElementById('otaMsg').textContent = 'Device rebooting — reload the page in a minute.';
+        return;
+      }
       document.getElementById('footerVersion').textContent = 'v' + s.firmwareVersion;
       document.getElementById('footerSize').textContent = (s.sketchSize / 1024).toFixed(0) + ' KB app';
+
+      const u = s.update || {};
+      const phase = u.phase || 'idle';
+      document.getElementById('otaInstalled').textContent = 'v' + s.firmwareVersion;
+      document.getElementById('otaLatest').textContent = u.latestVersion ? 'v' + u.latestVersion : '—';
+      document.getElementById('otaNotes').textContent =
+        (u.updateAvailable && u.notes) ? u.notes : '';
+
+      let msg = OTA_PHASE_LABELS[phase] || '';
+      if (phase === 'downloading') {
+        const pct = (u.progress >= 0) ? ` ${u.progress}%` : '';
+        msg = `Downloading ${u.stage || 'image'}…${pct}`;
+      } else if (phase === 'error' && u.error) {
+        msg = 'Update failed: ' + u.error;
+      }
+      document.getElementById('otaMsg').textContent = msg;
+
+      const applyBtn = document.getElementById('otaApplyBtn');
+      const busy = (phase === 'checking' || phase === 'downloading' || phase === 'applying');
+      applyBtn.classList.toggle('hidden', !u.updateAvailable || busy);
+      applyBtn.textContent = u.latestVersion ? `Install v${u.latestVersion}` : 'Install update';
+      document.getElementById('otaCheckBtn').disabled = busy;
+      applyBtn.disabled = busy;
+
+      // Poll only while an operation is actually running — otherwise the page
+      // never polls on its own (see the note at the bottom of this script).
+      clearTimeout(otaPollTimer);
+      if (busy) otaPollTimer = setTimeout(loadOta, 2500);
     }
+
+    document.getElementById('otaCheckBtn').addEventListener('click', async () => {
+      document.getElementById('otaMsg').textContent = 'Checking GitHub…';
+      await fetch('/api/ota-check', { method: 'POST' });
+      setTimeout(loadOta, 800);
+    });
+
+    document.getElementById('otaApplyBtn').addEventListener('click', async () => {
+      const v = document.getElementById('otaLatest').textContent;
+      if (!confirm(`Install firmware ${v}? The device will download it and reboot; notification forwarding pauses for up to a minute.`)) return;
+      document.getElementById('otaMsg').textContent = 'Starting update…';
+      const res = await fetch('/api/ota-apply', { method: 'POST' });
+      if (!res.ok) {
+        document.getElementById('otaMsg').textContent = 'Could not start update.';
+        return;
+      }
+      setTimeout(loadOta, 800);
+    });
 
     providerSelect.addEventListener('change', () => showFieldsFor(providerSelect.value));
 
@@ -686,7 +759,7 @@
     loadStatus();
     loadStats();
     loadLog();
-    loadFooter();
+    loadOta();
   </script>
 </body>
 </html>

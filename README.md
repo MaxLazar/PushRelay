@@ -61,11 +61,13 @@ To read the device's IP off the cable at any time: keep it connected, click
 and watch for `[Main] WiFi connected: 192.168.…`.
 
 The flasher page and firmware images are built and published automatically by
-the [`Web Flasher` GitHub Action](.github/workflows/flasher.yml); tagged
-releases (`v*`) also carry the raw `.bin` files as release assets.
+the [`Web Flasher` GitHub Action](.github/workflows/flasher.yml) on every
+firmware-affecting push to `main`, which also cuts a versioned GitHub Release
+(see [Releases & versioning](#releases--versioning)).
 
 After the first flash, all further updates go [over the air](#updating-firmware) —
-no cable, and no web flasher needed.
+no cable needed. End users can update straight from the admin UI; there's
+nothing else to install.
 
 ## Requirements (building from source)
 
@@ -252,8 +254,9 @@ Open **http://pushrelay.local** in any browser (mobile Safari/Chrome included, n
 app required). The page is split into four tabs:
 
 - **Home** — live status (BLE/ANCS connection, WiFi signal, uptime, firmware
-  version — tap **Refresh** to update, see the stability note below) and the
-  **Statistics** card
+  version — tap **Refresh** to update, see the stability note below), the
+  **Firmware update** card (see [Updating firmware](#updating-firmware)), and
+  the **Statistics** card
 - **Provider** — the default delivery provider (Bark / Pushover / MQTT) and
   its credentials, **Recipients** for fanning out to more than one
   destination, and **Message format** for customizing the forwarded text (see
@@ -314,8 +317,24 @@ and one global broker covers the realistic use case.
 
 ## Updating firmware
 
-**Over the air** (no cable needed once the device has WiFi) — this is the normal
-path after the first flash:
+**From the admin UI** (no computer at all) — the normal path for end users. The
+**Home** tab has a **Firmware update** card:
+
+1. Click **Check for updates**. The device fetches
+   [`manifest.json`](https://maxlazar.github.io/PushRelay/manifest.json) from
+   GitHub Pages and compares its version with the running firmware.
+2. If a newer version is published, click **Install v*x.y.z***. The device
+   streams the new firmware (and the admin-page filesystem image) straight
+   into its spare OTA slot, verifies each against the SHA-256 in the manifest,
+   and reboots. Notification forwarding pauses for up to a minute during the
+   download.
+
+Integrity is guaranteed by the manifest SHA-256, so the transfer uses a plain
+TLS connection with no pinned certificate. A bad or interrupted download is
+rejected before it is committed and leaves the running firmware untouched.
+
+**Over the air with `pio`** (no cable, but needs a computer with PlatformIO) —
+the developer path:
 
 ```bash
 pio run --target upload --upload-port pushrelay.local \
@@ -337,6 +356,33 @@ pio run --target upload
 > separate NVS partition. A full `pio run --target erase` (or `esptool.py
 > erase_flash`) wipes everything, including BLE bond data, and will require
 > re-pairing from scratch.
+
+## Releases & versioning
+
+Every push to `main` that touches firmware/filesystem sources
+(`src/`, `include/`, `data/`, `platformio.ini`, `version.txt`, `scripts/`)
+runs the [`Web Flasher` workflow](.github/workflows/flasher.yml), which:
+
+- rebuilds the Pages site + web flasher,
+- publishes `firmware.bin`, `littlefs.bin` and `manifest.json` to GitHub Pages
+  (this is what the admin-UI updater reads), and
+- creates a `v*x.y.z*` GitHub Release with the same files attached as an
+  immutable archive.
+
+Doc-only pushes redeploy Pages but do not cut a release.
+
+**Version numbers are `MAJOR.MINOR.PATCH`:**
+
+- `MAJOR.MINOR` live in [`version.txt`](version.txt) and are bumped by hand.
+- `PATCH` is computed at build time by
+  [`scripts/pio_version.py`](scripts/pio_version.py) as the number of commits
+  since `version.txt` last changed — so it resets to `0` on every `MINOR` bump
+  and is otherwise monotonic on a linear `main` history. CI also passes the
+  same string through `PUSHRELAY_VERSION` so the firmware reports exactly the
+  tag it was released under.
+
+To ship a `MINOR`/`MAJOR` bump: edit `version.txt`, commit, push. The next
+build is `x.y.0`.
 
 ## App filter
 

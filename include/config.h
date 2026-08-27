@@ -11,6 +11,15 @@
 // BLE identity advertised to iOS/macOS.
 #define BLE_DEVICE_NAME "PushRelay"
 
+// Over-the-air self-update (admin UI "Firmware update" card). The device pulls
+// a small JSON manifest plus the firmware/filesystem images from GitHub Pages
+// (published by .github/workflows/flasher.yml on every firmware-affecting push).
+// Pages is used instead of the GitHub API so there is no rate limit and no
+// cross-host redirect; image integrity is checked with the SHA-256 in the
+// manifest, so a plain TLS connection (no pinned CA) is acceptable here.
+#define OTA_BASE_URL     "https://maxlazar.github.io/PushRelay/"
+#define OTA_MANIFEST_URL OTA_BASE_URL "manifest.json"
+
 // WiFiManager captive-portal AP name used on first boot / lost credentials.
 #define WIFI_SETUP_AP_NAME "PushRelay-Setup"
 #define WIFI_SETUP_TIMEOUT_SEC 180
