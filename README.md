@@ -171,12 +171,20 @@ The onboard LED (GPIO2) reports state at a glance:
 - **Deduplication:** ANCS can redeliver the same notification (e.g. on
   reconnect) — the last 10 notification UIDs are tracked in memory and repeats
   are dropped silently.
+- **Backlog suppression:** on every (re)connect, ANCS resends "Added" events
+  for *every* notification still sitting in the phone's Notification Center,
+  not just new ones — without this, a reconnect would re-forward the entire
+  backlog (old calendar reminders, days-old messages, etc.). Notifications
+  arriving within 4 seconds of ANCS becoming ready are treated as backlog and
+  dropped silently; anything after that is forwarded normally.
 - **WiFi/BLE radio coexistence:** the ESP32 has a single 2.4GHz radio shared
   by WiFi and Bluetooth. The firmware explicitly prioritizes Bluetooth's radio
   time (`esp_coex_preference_set(ESP_COEX_PREFER_BT)`) since ANCS is the
   device's actual purpose.
 
 ## Web admin UI
+
+![PushRelay admin UI — Home tab](images/pushrelay-homepage.png)
 
 Open **http://pushrelay.local** in any browser (mobile Safari/Chrome included, no
 app required). The page is split into four tabs:

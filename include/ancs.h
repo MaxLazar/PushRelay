@@ -292,6 +292,7 @@ private:
         }
 
         ancsReady = true;
+        ancsReadyMillis = millis();
         Serial.printf("[ANCS] Ready — subscribed to Notification Source and Data Source\n");
     }
 
@@ -319,6 +320,23 @@ private:
                 return;
             }
             rememberUid(uid);
+
+            // ANCS resends "Added" events for every notification still sitting
+            // in Notification Center as soon as we (re)subscribe — not just
+            // genuinely new ones. Without this, every reconnect re-forwards the
+            // phone's entire notification backlog (observed: a two-week-old
+            // calendar reminder got pushed to Bark on reconnect, despite never
+            // appearing on the phone that day). Real backlog arrives in a burst
+            // right at connect; treat anything in that initial window as
+            // backlog and drop it, while still remembering the UID above so a
+            // near-simultaneous "Modified" for the same notification doesn't
+            // double up.
+            if (ancsReadyMillis != 0 && millis() - ancsReadyMillis < kBacklogSuppressWindowMs) {
+                Serial.printf("[ANCS] Skipping backlog notification uid=%u (arrived %u ms after ready)\n",
+                              uid, (unsigned)(millis() - ancsReadyMillis));
+                return;
+            }
+
             pendingAttributeRequestUid = uid;
             hasPendingAttributeRequest = true;
         }
@@ -427,6 +445,10 @@ private:
     static const uint8_t kMaxClientConnectAttempts = 8; // ~20s of retries total
     uint32_t nextClientAttemptMillis = 0;
     uint8_t clientConnectAttempts = 0;
+
+    // Backlog-suppression window — see handleNotificationSource().
+    static const uint32_t kBacklogSuppressWindowMs = 4000;
+    uint32_t ancsReadyMillis = 0;
 
     NotificationCallback onNotification;
     NimBLEServer* server = nullptr;
