@@ -61,6 +61,15 @@
     }
     .note { color: var(--muted); font-size: .9rem; }
     esp-web-install-button { --esp-tools-button-color: var(--accent); }
+    .fallback-btn {
+      font: inherit;
+      padding: .6rem 1.1rem;
+      border-radius: 8px;
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -70,12 +79,24 @@
 
     <div class="card unsupported" id="unsupported">
       <strong>This browser can't flash.</strong>
-      <p class="note">Web Serial is only available in Chrome, Edge, or another Chromium-based desktop browser. Open this page there and try again.</p>
+      <p class="note">Web Serial needs Chrome or Edge (desktop) served over HTTPS.
+        You're on <span id="ctx"></span>. Open
+        <a href="https://maxlazar.github.io/PushRelay/">the published page</a> in Chrome/Edge and try again.</p>
+    </div>
+
+    <div class="card unsupported" id="loadfail">
+      <strong>Flasher library didn't load.</strong>
+      <p class="note">The <code>esp-web-tools</code> script was blocked or failed to fetch
+        (check the browser console / network tab). Try a hard reload, or a different network.</p>
     </div>
 
     <div class="card">
       <div class="flash-row">
-        <esp-web-install-button manifest="./manifest.json"></esp-web-install-button>
+        <esp-web-install-button manifest="./manifest.json">
+          <button slot="activate" class="fallback-btn">Connect &amp; Install</button>
+          <span slot="unsupported" class="note">Web Serial not available — use desktop Chrome or Edge.</span>
+          <span slot="not-allowed" class="note">Serial access was blocked (needs HTTPS).</span>
+        </esp-web-install-button>
         <span class="note">ESP32-DevKitC / WROVER, 8&nbsp;MB flash</span>
       </div>
     </div>
@@ -99,10 +120,32 @@
     <p class="note">Firmware source: <a href="https://github.com/MaxLazar/PushRelay" target="_blank" rel="noopener">github.com/MaxLazar/PushRelay</a></p>
   </main>
 
-  <script type="module" src="https://unpkg.com/esp-web-tools@10.0.3/dist/web/install-button.js?module"></script>
   <script>
-    if (!('serial' in navigator)) {
+    // Diagnostics: show *why* the button might be missing.
+    var secure = window.isSecureContext;
+    var hasSerial = 'serial' in navigator;
+    document.getElementById('ctx').textContent =
+      location.protocol + '//' + location.host + (secure ? ' (secure)' : ' (NOT a secure context)');
+    if (!hasSerial || !secure) {
       document.getElementById('unsupported').style.display = 'block';
+    }
+    // If the custom element never upgrades, the library failed to load.
+    window.addEventListener('load', function () {
+      setTimeout(function () {
+        if (!(customElements.get('esp-web-install-button'))) {
+          document.getElementById('loadfail').style.display = 'block';
+        }
+      }, 3000);
+    });
+  </script>
+  <script type="module"
+          src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"
+          onerror="document.getElementById('loadfail').style.display='block'"></script>
+  <script type="module">
+    // Fallback CDN if unpkg is unreachable.
+    if (!customElements.get('esp-web-install-button')) {
+      import('https://cdn.jsdelivr.net/npm/esp-web-tools@10/dist/web/install-button.js')
+        .catch(function () { document.getElementById('loadfail').style.display = 'block'; });
     }
   </script>
 </body>
