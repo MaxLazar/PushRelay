@@ -3,110 +3,326 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PushRelay — install &amp; setup</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%94%94%3C/text%3E%3C/svg%3E" />
+  <title>PushRelay — docs &amp; firmware installer</title>
+  <meta name="description" content="Flash the PushRelay firmware onto an ESP32 from your browser, then relay your iPhone notifications to your own push service." />
+
+  <link rel="icon" type="image/png" href="images/pushrelay-logo-x1.png" />
+  <link rel="apple-touch-icon" href="images/pushrelay-logo-x1.png" />
+
   <style>
+    /* ---------- Notion-style palette ---------- */
     :root {
-      --bg: #f6f7f9;
-      --card: #ffffff;
-      --fg: #1c1f23;
-      --muted: #5b6470;
-      --border: #e3e6ea;
-      --accent: #2b6cb0;
-      --warn-bg: rgba(192, 86, 33, .08);
-      --warn-border: #c05621;
+      --bg: #ffffff;
+      --text: #37352f;
+      --text-gray: #787774;
+      --divider: rgba(55, 53, 47, 0.09);
+      --hover: rgba(55, 53, 47, 0.06);
+      --callout-bg: #f7f6f3;
+      --code-bg: rgba(135, 131, 120, 0.15);
+      --code-text: #eb5757;
+      --blue: #2383e2;
+      --nav-bg: rgba(255, 255, 255, 0.8);
+      --icon-tile: linear-gradient(135deg, #2b6cb0, #63b3ed);
+      --cover: linear-gradient(115deg, #dbeafe 0%, #eef2ff 45%, #f5f3ff 100%);
+      --shadow: 0 1px 2px rgba(15, 15, 15, 0.1), 0 3px 6px rgba(15, 15, 15, 0.05);
     }
     @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #14171a;
-        --card: #1d2125;
-        --fg: #e8eaed;
-        --muted: #9aa4af;
-        --border: #2c3238;
-        --accent: #63b3ed;
-        --warn-bg: rgba(237, 137, 54, .1);
-        --warn-border: #dd6b20;
+      :root:not([data-theme="light"]) {
+        --bg: #191919;
+        --text: rgba(255, 255, 255, 0.87);
+        --text-gray: rgba(255, 255, 255, 0.44);
+        --divider: rgba(255, 255, 255, 0.13);
+        --hover: rgba(255, 255, 255, 0.055);
+        --callout-bg: #202020;
+        --code-bg: rgba(135, 131, 120, 0.15);
+        --code-text: #ff7369;
+        --blue: #529cca;
+        --nav-bg: rgba(25, 25, 25, 0.8);
+        --icon-tile: linear-gradient(135deg, #2b6cb0, #4a5568);
+        --cover: linear-gradient(115deg, #1e293b 0%, #1e1b4b 55%, #172554 100%);
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 3px 8px rgba(0, 0, 0, 0.3);
       }
     }
+    :root[data-theme="dark"] {
+      --bg: #191919;
+      --text: rgba(255, 255, 255, 0.87);
+      --text-gray: rgba(255, 255, 255, 0.44);
+      --divider: rgba(255, 255, 255, 0.13);
+      --hover: rgba(255, 255, 255, 0.055);
+      --callout-bg: #202020;
+      --code-bg: rgba(135, 131, 120, 0.15);
+      --code-text: #ff7369;
+      --blue: #529cca;
+      --nav-bg: rgba(25, 25, 25, 0.8);
+      --icon-tile: linear-gradient(135deg, #2b6cb0, #4a5568);
+      --cover: linear-gradient(115deg, #1e293b 0%, #1e1b4b 55%, #172554 100%);
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 3px 8px rgba(0, 0, 0, 0.3);
+    }
+
     * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 60px; }
     body {
       margin: 0;
       background: var(--bg);
-      color: var(--fg);
-      font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text);
+      font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji";
+      -webkit-font-smoothing: antialiased;
+    }
+    ::selection { background: rgba(35, 131, 226, 0.28); }
+
+    /* ---------- top nav ---------- */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
       display: flex;
-      justify-content: center;
-      padding: 2.5rem 1rem 5rem;
-    }
-    main { width: 100%; max-width: 760px; }
-    h1 { font-size: 1.8rem; margin: 0 0 .3rem; }
-    h2 {
-      font-size: 1.15rem;
-      margin: 2.5rem 0 .75rem;
-      padding-top: 1.5rem;
-      border-top: 1px solid var(--border);
-    }
-    h2:first-of-type { border-top: 0; padding-top: 0; margin-top: 2rem; }
-    h3 { font-size: 1rem; margin: 1.25rem 0 .4rem; }
-    .lede { color: var(--muted); font-size: 1.05rem; margin: 0 0 1.5rem; }
-    .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.4rem 1.5rem;
-      margin: 1rem 0;
-    }
-    .flash-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
-    ol, ul { padding-left: 1.3rem; margin: .5rem 0; }
-    li { margin: .4rem 0; }
-    code {
-      background: rgba(128, 128, 128, .16);
-      padding: .1rem .35rem;
-      border-radius: 4px;
-      font-size: .88em;
-    }
-    a { color: var(--accent); }
-    .note { color: var(--muted); font-size: .92rem; }
-    .warn {
-      border-color: var(--warn-border);
-      background: var(--warn-bg);
-    }
-    .hidden { display: none; }
-    figure {
-      margin: 1rem 0;
-      text-align: center;
-    }
-    figure img {
-      max-width: 100%;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-    }
-    figure.phone img { max-width: 300px; }
-    figcaption { color: var(--muted); font-size: .88rem; margin-top: .5rem; }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      align-items: center;
+      justify-content: space-between;
       gap: 1rem;
+      height: 45px;
+      padding: 0 14px;
+      background: var(--nav-bg);
+      backdrop-filter: saturate(180%) blur(16px);
+      -webkit-backdrop-filter: saturate(180%) blur(16px);
+      border-bottom: 1px solid var(--divider);
+      font-size: 14px;
     }
-    .grid figure img { max-width: 100%; }
-    .fallback-btn {
-      font: inherit;
-      padding: .6rem 1.1rem;
+    .topbar .crumb { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+    .topbar .crumb img { width: 18px; height: 18px; border-radius: 4px; background: var(--icon-tile); padding: 1px; }
+    .topbar a { color: var(--text-gray); text-decoration: none; padding: 4px 8px; border-radius: 6px; }
+    .topbar a:hover { background: var(--hover); color: var(--text); }
+
+    /* ---------- cover + page icon ---------- */
+    .cover {
+      height: 25vh;
+      max-height: 240px;
+      min-height: 140px;
+      background: var(--cover);
+    }
+    .page {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 0 max(16px, env(safe-area-inset-left)) 8rem;
+    }
+    .page-icon {
+      width: 78px;
+      height: 78px;
+      margin-top: -41px;
+      margin-bottom: 4px;
+      border-radius: 12px;
+      background: var(--icon-tile);
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .page-icon img { width: 62px; height: 62px; filter: brightness(1.4); }
+
+    h1.title {
+      font-size: 40px;
+      line-height: 1.2;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin: 6px 0 6px;
+    }
+    .subtitle { color: var(--text-gray); font-size: 1rem; margin: 0 0 28px; max-width: 46ch; }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      line-height: 1.3;
+      margin: 2.2em 0 0.4em;
+      scroll-margin-top: 60px;
+    }
+    h3 { font-size: 1.15rem; font-weight: 600; margin: 1.6em 0 0.3em; }
+    p { margin: 0.5em 0; }
+    a { color: inherit; text-decoration: underline; text-decoration-color: var(--divider); text-underline-offset: 3px; }
+    a:hover { text-decoration-color: currentColor; }
+    strong { font-weight: 600; }
+    ul, ol { padding-left: 1.6em; margin: 0.4em 0; }
+    li { margin: 0.3em 0; padding-left: 2px; }
+    hr { border: 0; border-top: 1px solid var(--divider); margin: 2.4em 0; }
+
+    code {
+      background: var(--code-bg);
+      color: var(--code-text);
+      font-family: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 0.85em;
+      padding: 0.15em 0.4em;
+      border-radius: 3px;
+    }
+
+    /* ---------- callout block ---------- */
+    .callout {
+      display: flex;
+      gap: 12px;
+      padding: 16px 16px 16px 14px;
+      margin: 1em 0;
+      background: var(--callout-bg);
+      border: 1px solid var(--divider);
+      border-radius: 6px;
+    }
+    .callout .emoji { font-size: 1.1rem; line-height: 1.5; flex-shrink: 0; }
+    .callout > div > *:first-child { margin-top: 0; }
+    .callout > div > *:last-child { margin-bottom: 0; }
+    .callout.hidden { display: none; }
+
+    /* ---------- table of contents ---------- */
+    .toc { margin: 1.5em 0 0.5em; }
+    .toc a {
+      display: block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      text-decoration: none;
+      color: var(--text-gray);
+      font-size: 0.92rem;
+    }
+    .toc a:hover { background: var(--hover); color: var(--text); }
+
+    /* ---------- install card ---------- */
+    .install {
+      border: 1px solid var(--divider);
       border-radius: 8px;
-      border: 1px solid var(--accent);
-      background: var(--accent);
+      padding: 20px;
+      margin: 1.2em 0;
+      background: var(--bg);
+      box-shadow: var(--shadow);
+    }
+    .install-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
+    .btn {
+      font: inherit;
+      font-weight: 500;
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: 1px solid var(--blue);
+      background: var(--blue);
       color: #fff;
       cursor: pointer;
     }
-    esp-web-install-button { --esp-tools-button-color: var(--accent); }
+    .btn:hover { filter: brightness(1.05); }
+    .muted { color: var(--text-gray); font-size: 0.88rem; }
+    esp-web-install-button { --esp-tools-button-color: var(--blue); }
+
+    /* ---------- figures ---------- */
+    figure { margin: 1.2em 0; }
+    figure img {
+      max-width: 100%;
+      border: 1px solid var(--divider);
+      border-radius: 8px;
+      display: block;
+    }
+    figure.phone img { max-width: 280px; margin: 0 auto; }
+    figcaption { color: var(--text-gray); font-size: 0.85rem; margin-top: 0.5em; }
+    .cols {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin: 1.2em 0;
+    }
+    .cols figure { margin: 0; }
+
+    /* ---------- toggle (Notion-style) ---------- */
+    details {
+      border-bottom: 1px solid var(--divider);
+      padding: 4px 0;
+    }
+    details summary {
+      cursor: pointer;
+      list-style: none;
+      padding: 8px 4px 8px 24px;
+      position: relative;
+      font-weight: 500;
+      border-radius: 4px;
+    }
+    details summary:hover { background: var(--hover); }
+    details summary::-webkit-details-marker { display: none; }
+    details summary::before {
+      content: "";
+      position: absolute;
+      left: 6px;
+      top: 50%;
+      width: 0;
+      height: 0;
+      border: 5px solid transparent;
+      border-left-color: var(--text-gray);
+      transform: translateY(-50%);
+      transition: transform 0.15s ease;
+    }
+    details[open] summary::before { transform: translateY(-50%) rotate(90deg); }
+    details .toggle-body { padding: 2px 4px 12px 24px; color: var(--text); }
+    details .toggle-body > *:first-child { margin-top: 0; }
+
+    footer { margin-top: 3em; color: var(--text-gray); font-size: 0.88rem; }
+
+    @media (max-width: 600px) {
+      h1.title { font-size: 32px; }
+      .cover { min-height: 120px; }
+    }
   </style>
 </head>
 <body>
-  <main>
-    <h1>PushRelay</h1>
-    <p class="lede">Firmware for an ESP32 that relays your iPhone's notifications to your own push service.</p>
+  <nav class="topbar">
+    <span class="crumb">
+      <img src="images/pushrelay-logo-x1.png" alt="" />
+      PushRelay
+    </span>
+    <span>
+      <a href="#flash">Install</a>
+      <a href="https://github.com/MaxLazar/PushRelay" target="_blank" rel="noopener">GitHub&nbsp;↗</a>
+    </span>
+  </nav>
 
-    <h2>What it does</h2>
+  <div class="cover" aria-hidden="true"></div>
+
+  <main class="page">
+    <div class="page-icon"><img src="images/pushrelay-logo-x1.png" alt="PushRelay icon" /></div>
+
+    <h1 class="title">PushRelay</h1>
+    <p class="subtitle">
+      Firmware for an ESP32 that relays your iPhone's notifications to your own push service —
+      flashed straight from this page, no tools to install.
+    </p>
+
+    <div class="callout" id="browser-ok">
+      <span class="emoji">🧭</span>
+      <div>
+        <strong>Flashing needs desktop Chrome or Edge.</strong>
+        <p class="muted">Web Serial isn't available in Firefox, Safari, or on mobile. The rest of this
+          page reads fine anywhere — come back to the install step from a supported browser.</p>
+      </div>
+    </div>
+
+    <div class="callout hidden" id="unsupported">
+      <span class="emoji">⚠️</span>
+      <div>
+        <strong>This browser can't flash.</strong>
+        <p class="muted">Web Serial needs Chrome or Edge on the desktop, served over HTTPS.
+          You're on <span id="ctx"></span>.</p>
+      </div>
+    </div>
+    <div class="callout hidden" id="loadfail">
+      <span class="emoji">🚧</span>
+      <div>
+        <strong>Flasher library didn't load.</strong>
+        <p class="muted">The <code>esp-web-tools</code> script was blocked or failed to fetch
+          (check the browser console). Try a hard reload or a different network.</p>
+      </div>
+    </div>
+
+    <nav class="toc" aria-label="On this page">
+      <a href="#what">What it does</a>
+      <a href="#flash">1 · Flash the firmware</a>
+      <a href="#wifi">2 · Connect it to WiFi</a>
+      <a href="#pair">3 · Pair with your iPhone</a>
+      <a href="#provider">4 · Choose a delivery provider</a>
+      <a href="#admin">The admin UI</a>
+      <a href="#updating">Updating later</a>
+      <a href="#faq">Troubleshooting</a>
+    </nav>
+
+    <hr />
+
+    <h2 id="what">What it does</h2>
     <p>
       PushRelay turns a cheap ESP32 board into a bridge for iPhone notifications. It pairs with
       your iPhone over Bluetooth the same way a smartwatch does, subscribes to
@@ -123,34 +339,28 @@
       schedule, per-app priority, multiple recipients, a custom message format, and a recent-notifications
       log. After the first USB flash, all further updates happen over WiFi (OTA) — no cable needed again.
     </p>
-    <p class="note">
-      Hardware: an ESP32 board with 8&nbsp;MB flash (e.g. ESP32-DevKitC / WROVER-E), a USB cable for the
-      first flash, and an iPhone. ANCS is iOS-only in practice — a Mac will pair but never deliver notifications.
-    </p>
 
-    <h2>1. Flash the firmware</h2>
+    <div class="callout">
+      <span class="emoji">🔌</span>
+      <div>
+        <strong>You'll need:</strong> an ESP32 board with 8&nbsp;MB flash (e.g. ESP32-DevKitC /
+        WROVER-E), a USB cable for the first flash, and an iPhone. ANCS is iOS-only in practice —
+        a Mac will pair but never deliver notifications.
+      </div>
+    </div>
+
+    <h2 id="flash">1 · Flash the firmware</h2>
     <p>Nothing to install on your computer. Use <strong>desktop Chrome or Edge</strong> — Web Serial isn't
        available in Firefox, Safari, or on mobile.</p>
 
-    <div class="card warn hidden" id="unsupported">
-      <strong>This browser can't flash.</strong>
-      <p class="note">Web Serial needs Chrome or Edge on the desktop, served over HTTPS.
-        You're on <span id="ctx"></span>.</p>
-    </div>
-    <div class="card warn hidden" id="loadfail">
-      <strong>Flasher library didn't load.</strong>
-      <p class="note">The <code>esp-web-tools</code> script was blocked or failed to fetch
-        (check the browser console). Try a hard reload or a different network.</p>
-    </div>
-
-    <div class="card">
-      <div class="flash-row">
+    <div class="install">
+      <div class="install-row">
         <esp-web-install-button manifest="./manifest.json">
-          <button slot="activate" class="fallback-btn">Connect &amp; install</button>
-          <span slot="unsupported" class="note">Web Serial not available — use desktop Chrome or Edge.</span>
-          <span slot="not-allowed" class="note">Serial access was blocked (needs HTTPS).</span>
+          <button slot="activate" class="btn">Connect &amp; install</button>
+          <span slot="unsupported" class="muted">Web Serial not available — use desktop Chrome or Edge.</span>
+          <span slot="not-allowed" class="muted">Serial access was blocked (needs HTTPS).</span>
         </esp-web-install-button>
-        <span class="note">ESP32, 8&nbsp;MB flash</span>
+        <span class="muted">ESP32 · 8&nbsp;MB flash</span>
       </div>
       <ol>
         <li>Plug the ESP32 into your computer with a USB cable.</li>
@@ -158,14 +368,14 @@
           <code>USB Serial</code>, or <code>COMx</code> on Windows).</li>
         <li>Choose <em>Install PushRelay</em> and confirm the erase prompt. Flashing takes about a minute.</li>
       </ol>
-      <p class="note">A brand-new, never-flashed ESP32 is fine — the chip's built-in ROM bootloader handles
+      <p class="muted">A brand-new, never-flashed ESP32 is fine — the chip's built-in ROM bootloader handles
         the first flash. If no port appears, install the
         <a href="https://www.silabs.com/developer-tools/usb-to-uart-bridge-vcp-drivers" target="_blank" rel="noopener">CP210x USB-UART driver</a>
         (rarely needed on current Windows/macOS/Linux). Close any other serial monitor (PlatformIO, Arduino IDE) first.</p>
     </div>
 
-    <h2>2. Connect it to WiFi</h2>
-    <p>Right after flashing, still on the flash page, the installer offers a <strong>WiFi setup</strong>
+    <h2 id="wifi">2 · Connect it to WiFi</h2>
+    <p>Right after flashing, still on this page, the installer offers a <strong>WiFi setup</strong>
        step over the USB cable: pick your network, enter the password, and when the ESP32 connects the
        page shows a clickable <strong>Visit device</strong> link straight to its IP address
        (<code>http://192.168.x.x</code>). That address is the admin UI — bookmark it.</p>
@@ -179,12 +389,17 @@
       <img src="images/pushrelay-wifimanager.png" alt="PushRelay-Setup captive portal with Configure WiFi, Info, Exit and Update buttons" />
       <figcaption>The <code>PushRelay-Setup</code> captive portal — tap <em>Configure WiFi</em>.</figcaption>
     </figure>
-    <p class="note">To find the IP later without the installer: keep the cable connected, click
-      <em>Logs &amp; Console</em> on the flash page, press the board's <code>EN</code>/<code>RST</code>
-      button, and watch for <code>WiFi connected: 192.168.…</code>. It's also on the admin UI's Home tab,
-      and the device answers at <code>http://pushrelay.local</code> on most networks.</p>
+    <div class="callout">
+      <span class="emoji">🔎</span>
+      <div>
+        <strong>Finding the IP later, without the installer:</strong> keep the cable connected, click
+        <em>Logs &amp; Console</em> on this page, press the board's <code>EN</code>/<code>RST</code>
+        button, and watch for <code>WiFi connected: 192.168.…</code>. It's also on the admin UI's Home
+        tab, and the device answers at <code>http://pushrelay.local</code> on most networks.
+      </div>
+    </div>
 
-    <h2>3. Pair with your iPhone</h2>
+    <h2 id="pair">3 · Pair with your iPhone</h2>
     <ol>
       <li>On the iPhone, open <strong>Settings → Bluetooth</strong>.</li>
       <li><strong>PushRelay</strong> appears under <em>Other Devices</em>. Tap it.</li>
@@ -193,15 +408,8 @@
       <li>Once paired it stays bonded across reboots, and notifications start flowing to your provider
         automatically.</li>
     </ol>
-    <p class="note"><strong>If Settings never lists PushRelay:</strong> some iOS versions don't show generic
-      BLE accessories there. Use a free BLE scanner app (e.g. <em>LightBlue</em>) to connect to
-      <code>PushRelay</code> once — that triggers the same system pairing dialog. It's a one-time step;
-      afterwards the device reconnects on its own.</p>
-    <p class="note"><strong>Bonded but no notifications ever arrive?</strong> Almost always a plain
-      ("Just Works") pairing instead of an authenticated one. Forget the device in iOS Bluetooth settings
-      and pair again.</p>
 
-    <h2>4. Choose a delivery provider</h2>
+    <h2 id="provider">4 · Choose a delivery provider</h2>
     <p>Open the admin UI (the <em>Visit device</em> link, its IP, or <code>http://pushrelay.local</code>),
        go to the <strong>Provider</strong> tab, pick Bark, Pushover, or MQTT, paste the credentials, and
        press <em>Save</em>.</p>
@@ -218,8 +426,8 @@
         notification is published as JSON.</li>
     </ul>
 
-    <h2>The admin UI</h2>
-    <div class="grid">
+    <h2 id="admin">The admin UI</h2>
+    <div class="cols">
       <figure>
         <img src="images/pushrelay-homepage.png" alt="Home tab showing BLE and Notification Center status, WiFi IP and signal, uptime, firmware version, and statistics" />
         <figcaption><strong>Home</strong> — live status, the device IP, and statistics.</figcaption>
@@ -233,19 +441,62 @@
         <figcaption><strong>Log</strong> — the last 20 notifications and how each was delivered.</figcaption>
       </figure>
     </div>
-    <p class="note"><strong>Do&nbsp;Not&nbsp;Disturb hours are UTC</strong> — the device syncs time via NTP
-      with no timezone offset, so convert your local window. The backlog filter stops a reconnect from
-      re-forwarding your whole Notification Center; set the phone timezone offset on the Filters tab to
-      make it exact.</p>
+    <div class="callout">
+      <span class="emoji">🕒</span>
+      <div>
+        <strong>Do&nbsp;Not&nbsp;Disturb hours are UTC</strong> — the device syncs time via NTP with no
+        timezone offset, so convert your local window. The backlog filter stops a reconnect from
+        re-forwarding your whole Notification Center; set the phone timezone offset on the Filters tab to
+        make it exact.
+      </div>
+    </div>
 
-    <h2>Updating later</h2>
+    <h2 id="updating">Updating later</h2>
     <p>No cable needed after the first flash. From the admin UI or your build tools, push new firmware
       over WiFi (OTA), protected by the <code>OTA_PASSWORD</code> you set at build time. Reflashing does
       not erase your WiFi credentials, provider keys, or the iPhone bond.</p>
 
-    <p class="note" style="margin-top:2.5rem">
-      Source &amp; full docs: <a href="https://github.com/MaxLazar/PushRelay" target="_blank" rel="noopener">github.com/MaxLazar/PushRelay</a>
-    </p>
+    <h2 id="faq">Troubleshooting</h2>
+
+    <details>
+      <summary>iOS Settings never lists PushRelay</summary>
+      <div class="toggle-body">
+        <p>Some iOS versions don't show generic BLE accessories under Settings&nbsp;→&nbsp;Bluetooth. Use a
+          free BLE scanner app (e.g. <em>LightBlue</em>) to connect to <code>PushRelay</code> once — that
+          triggers the same system pairing dialog. It's a one-time step; afterwards the device reconnects
+          on its own.</p>
+      </div>
+    </details>
+    <details>
+      <summary>Bonded, but no notifications ever arrive</summary>
+      <div class="toggle-body">
+        <p>Almost always a plain ("Just Works") pairing instead of an authenticated one. Forget the device
+          in iOS Bluetooth settings and pair again, accepting the passkey confirmation.</p>
+      </div>
+    </details>
+    <details>
+      <summary>No serial port appears when flashing</summary>
+      <div class="toggle-body">
+        <p>Install the
+          <a href="https://www.silabs.com/developer-tools/usb-to-uart-bridge-vcp-drivers" target="_blank" rel="noopener">CP210x USB-UART driver</a>,
+          try a different USB cable (some are power-only), and close any other serial monitor
+          (PlatformIO, Arduino IDE) that might be holding the port.</p>
+      </div>
+    </details>
+    <details>
+      <summary>Can't find the device's IP address</summary>
+      <div class="toggle-body">
+        <p>Try <code>http://pushrelay.local</code>, check your router's client list, or connect over USB
+          and use <em>Logs &amp; Console</em> on this page while pressing the board's
+          <code>EN</code>/<code>RST</code> button to watch for <code>WiFi connected: 192.168.…</code>.</p>
+      </div>
+    </details>
+
+    <footer>
+      <hr />
+      Source &amp; full docs:
+      <a href="https://github.com/MaxLazar/PushRelay" target="_blank" rel="noopener">github.com/MaxLazar/PushRelay</a>
+    </footer>
   </main>
 
   <script>
@@ -253,7 +504,10 @@
     var hasSerial = 'serial' in navigator;
     document.getElementById('ctx').textContent =
       location.protocol + '//' + location.host + (secure ? ' (secure)' : ' (NOT a secure context)');
-    if (!hasSerial || !secure) document.getElementById('unsupported').classList.remove('hidden');
+    if (!hasSerial || !secure) {
+      document.getElementById('unsupported').classList.remove('hidden');
+      document.getElementById('browser-ok').classList.add('hidden');
+    }
     window.addEventListener('load', function () {
       setTimeout(function () {
         if (!customElements.get('esp-web-install-button')) {
