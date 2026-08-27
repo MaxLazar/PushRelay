@@ -1,5 +1,9 @@
 # PushRelay
 
+> **📖 [maxlazar.github.io/PushRelay](https://maxlazar.github.io/PushRelay/)** —
+> project documentation and a browser-based flasher that sends the latest
+> firmware straight to your ESP32 over USB (Web Serial, no toolchain needed).
+
 PushRelay is ESP32 firmware that connects to an iPhone as a BLE peripheral
 (the same way a smartwatch does), intercepts notifications via **ANCS** (Apple
 Notification Center Service), and forwards them — app name, title, body — to a
