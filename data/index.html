@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PushRelay Admin</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23006e93'/%3E%3Cpath d='M9 4 L7 13 L11 13 L9 20 L18 10 L13 10 L15 4 Z' fill='%23ffffff'/%3E%3C/svg%3E">
+<style>
+  /*
+   * Colors, spacing, radius and type scale below are taken directly from
+   * Siemens iX (ix.siemens.io) — @siemens/ix classic theme tokens
+   * (theme-color-primary, common-variables spacing/radius/font-size scale).
+   * Values are inlined rather than pulled from the library itself since this
+   * page has to be a single self-contained file the ESP32 can serve with no
+   * external dependencies.
+   */
+  :root {
+    color-scheme: light dark;
+    --ix-primary: #006e93;
+    --ix-primary-hover: #196269;
+    --ix-alarm: #d72332;
+    --ix-success: #2c8500;
+    --ix-warning: #ffbb00;
+    --ix-text: rgba(0, 10, 20, 0.9);
+    --ix-text-soft: rgba(0, 10, 20, 0.6);
+    --ix-text-weak: rgba(0, 10, 20, 0.4);
+    --ix-border-std: rgba(0, 20, 40, 0.3);
+    --ix-border-soft: rgba(0, 20, 40, 0.2);
+    --ix-bg: #f5f7f8;
+    --ix-bg-card: #ffffff;
+    --ix-radius: 0.25rem;
+    --ix-space-xs: 0.25rem;
+    --ix-space-sm: 0.5rem;
+    --ix-space-md: 0.75rem;
+    --ix-space-lg: 1rem;
+    --ix-space-xl: 1.5rem;
+    --ix-control-h: 2rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ix-primary: #00bde3;
+      --ix-primary-hover: #33cdea;
+      --ix-text: rgba(245, 252, 255, 0.9);
+      --ix-text-soft: rgba(229, 247, 255, 0.65);
+      --ix-text-weak: rgba(219, 244, 255, 0.4);
+      --ix-border-std: rgba(211, 236, 248, 0.55);
+      --ix-border-soft: rgba(211, 236, 248, 0.4);
+      --ix-bg: #14181a;
+      --ix-bg-card: #1e2326;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    max-width: 480px; margin: 0 auto; padding: var(--ix-space-lg);
+    background: var(--ix-bg); color: var(--ix-text); font-size: 0.875rem;
+  }
+  h1 { font-size: 1.375rem; font-weight: 700; margin: 0 0 var(--ix-space-xs); }
+  h2 { font-size: 0.875rem; font-weight: 700; margin: 0 0 var(--ix-space-sm); }
+  .subtitle { color: var(--ix-text-soft); font-size: 0.75rem; margin-bottom: var(--ix-space-xl); }
+  .card { background: var(--ix-bg-card); border: 1px solid var(--ix-border-soft); border-radius: var(--ix-radius);
+          padding: var(--ix-space-lg); margin-bottom: var(--ix-space-lg); }
+  .row { display: flex; justify-content: space-between; padding: var(--ix-space-xs) 0; font-size: 0.8125rem; }
+  .row span:first-child { color: var(--ix-text-soft); }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .dot.ok { background: var(--ix-success); }
+  .dot.bad { background: var(--ix-alarm); }
+  label { display: block; font-size: 0.75rem; color: var(--ix-text-soft); margin-top: var(--ix-space-md); }
+  select, input {
+    width: 100%; height: var(--ix-control-h); padding: 0 var(--ix-space-sm); margin-top: var(--ix-space-xs);
+    box-sizing: border-box; font-size: 0.875rem; color: var(--ix-text); background: var(--ix-bg-card);
+    border: 1px solid var(--ix-border-std); border-radius: var(--ix-radius);
+  }
+  select:focus, input:focus { outline: 2px solid var(--ix-primary); outline-offset: -1px; }
+  button {
+    width: 100%; height: var(--ix-control-h); padding: 0 var(--ix-space-lg); margin-top: var(--ix-space-xl);
+    font-size: 0.875rem; font-weight: 700; border: none; border-radius: var(--ix-radius);
+    background: var(--ix-primary); color: #ffffff;
+  }
+  button.secondary { background: transparent; color: var(--ix-primary); border: 1px solid var(--ix-primary); margin-top: var(--ix-space-sm); }
+  button:active { background: var(--ix-primary-hover); }
+  button.secondary:active { background: color-mix(in srgb, var(--ix-primary) 12%, transparent); }
+  .field[data-provider] { display: none; }
+  .field.active { display: block; }
+  #saveMsg { text-align: center; font-size: 0.75rem; margin-top: var(--ix-space-sm); height: 1rem; color: var(--ix-text-soft); }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; margin-top: var(--ix-space-sm); }
+  .toggle-row label { margin: 0; }
+  .toggle-row input[type="checkbox"] { width: auto; height: auto; margin: 0; }
+  .hour-row { display: flex; gap: var(--ix-space-sm); }
+  .hour-row > div { flex: 1; }
+  .list-row { display: flex; gap: var(--ix-space-sm); align-items: flex-end; margin-top: var(--ix-space-sm); }
+  .list-row > div { flex: 1; }
+  .list-row select, .list-row input { margin-top: 0; }
+  .remove-btn {
+    flex: 0 0 auto; width: var(--ix-control-h); height: var(--ix-control-h); border-radius: var(--ix-radius);
+    border: 1px solid var(--ix-alarm); background: transparent; color: var(--ix-alarm);
+    font-size: 1rem; margin-top: 0; padding: 0;
+  }
+  .hidden { display: none; }
+  .top-app-row { display: flex; justify-content: space-between; font-size: 0.75rem; padding: 0.15rem 0; }
+
+  .log-entry { border-bottom: 1px solid var(--ix-border-soft); padding: var(--ix-space-sm) 0; }
+  .log-entry:last-child { border-bottom: none; }
+  .log-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.8125rem; }
+  .log-app { font-weight: 700; }
+  .log-age { color: var(--ix-text-weak); font-size: 0.6875rem; }
+  .log-title { font-size: 0.8125rem; margin-top: 0.15rem; }
+  .log-body { font-size: 0.75rem; color: var(--ix-text-soft); margin-top: 0.1rem; white-space: pre-wrap; word-break: break-word; }
+  .log-badge { display: inline-block; font-size: 0.625rem; font-weight: 700; padding: 0.1rem 0.4rem; border-radius: var(--ix-radius); margin-top: var(--ix-space-xs); }
+  .log-badge.forwarded { background: color-mix(in srgb, var(--ix-success) 15%, transparent); color: var(--ix-success); }
+  .log-badge.failed { background: color-mix(in srgb, var(--ix-alarm) 15%, transparent); color: var(--ix-alarm); }
+  .log-badge.filtered_app, .log-badge.filtered_dnd { background: color-mix(in srgb, var(--ix-text-weak) 30%, transparent); color: var(--ix-text-soft); }
+  .log-empty { color: var(--ix-text-soft); font-size: 0.8125rem; }
+
+  .secret-wrap { position: relative; margin-top: var(--ix-space-xs); }
+  .secret-wrap input { margin-top: 0; padding-right: 2.4rem; }
+  .secret-toggle {
+    position: absolute; right: 0.2rem; top: 50%; transform: translateY(-50%);
+    width: 1.75rem; height: 1.75rem; margin: 0; padding: 0.25rem; background: transparent;
+    border: none; color: var(--ix-text-weak); cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .secret-toggle svg { width: 100%; height: 100%; }
+  .secret-toggle.active { color: var(--ix-primary); }
+
+  .tabs { display: flex; gap: var(--ix-space-xs); margin-bottom: var(--ix-space-lg); border-bottom: 1px solid var(--ix-border-soft); }
+  .tab-btn {
+    flex: 1; background: transparent; color: var(--ix-text-soft); border: none; border-bottom: 2px solid transparent;
+    border-radius: 0; padding: var(--ix-space-md) var(--ix-space-xs); margin: 0; font-size: 0.75rem; font-weight: 700; height: auto;
+  }
+  .tab-btn.active { color: var(--ix-primary); border-bottom-color: var(--ix-primary); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+</style>
+</head>
+<body>
+  <h1>PushRelay</h1>
+  <div class="subtitle">Forwards iPhone notifications from ANCS to your provider.</div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="home" type="button">Home</button>
+    <button class="tab-btn" data-tab="provider" type="button">Provider</button>
+    <button class="tab-btn" data-tab="filters" type="button">Filters</button>
+    <button class="tab-btn" data-tab="log" type="button">Log</button>
+  </div>
+
+  <div class="tab-panel active" data-panel="home">
+    <div class="card">
+      <div class="row"><span><span id="bleDot" class="dot bad"></span>BLE</span><span id="bleStatus">—</span></div>
+      <div class="row"><span>ANCS</span><span id="ancsStatus">—</span></div>
+      <div class="row"><span>WiFi</span><span id="wifiStatus">—</span></div>
+      <div class="row"><span>Uptime</span><span id="uptime">—</span></div>
+      <div class="row"><span>Firmware</span><span id="firmware">—</span></div>
+      <button class="secondary" id="refreshBtn" type="button" style="margin-top: 0.75rem;">Refresh</button>
+    </div>
+
+    <div class="card">
+      <h2>Statistics</h2>
+      <div class="row"><span>Received</span><span id="statReceived">—</span></div>
+      <div class="row"><span>Forwarded</span><span id="statForwarded">—</span></div>
+      <div class="row"><span>Filtered</span><span id="statFiltered">—</span></div>
+      <div id="topApps" style="margin-top: 0.5rem;"></div>
+    </div>
+  </div>
+
+  <div class="tab-panel" data-panel="provider">
+    <div class="card">
+      <h2>Default provider</h2>
+      <label for="provider">Provider (used when no recipients are configured below)</label>
+      <select id="provider">
+        <option value="0">Bark</option>
+        <option value="1">Pushover</option>
+        <option value="2">MQTT</option>
+      </select>
+
+      <div class="field" data-provider="0">
+        <label for="barkKey">Bark device key</label>
+        <div class="secret-wrap">
+          <input id="barkKey" type="password" placeholder="e.g. AbCdEfGhIjKlMnOp">
+          <button class="secret-toggle" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12s3.75-7 10.5-7 10.5 7 10.5 7-3.75 7-10.5 7-10.5-7-10.5-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+      </div>
+
+      <div class="field" data-provider="1">
+        <label for="pushoverToken">Pushover app token</label>
+        <div class="secret-wrap">
+          <input id="pushoverToken" type="password">
+          <button class="secret-toggle" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12s3.75-7 10.5-7 10.5 7 10.5 7-3.75 7-10.5 7-10.5-7-10.5-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+        <label for="pushoverUser">Pushover user key</label>
+        <div class="secret-wrap">
+          <input id="pushoverUser" type="password">
+          <button class="secret-toggle" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12s3.75-7 10.5-7 10.5 7 10.5 7-3.75 7-10.5 7-10.5-7-10.5-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+      </div>
+
+      <div class="field" data-provider="2">
+        <label for="mqttBroker">MQTT broker host</label>
+        <input id="mqttBroker" type="text">
+        <label for="mqttPort">MQTT port</label>
+        <input id="mqttPort" type="number">
+        <label for="mqttUser">MQTT username (optional)</label>
+        <input id="mqttUser" type="text">
+        <label for="mqttPassword">MQTT password (optional)</label>
+        <div class="secret-wrap">
+          <input id="mqttPassword" type="password">
+          <button class="secret-toggle" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12s3.75-7 10.5-7 10.5 7 10.5 7-3.75 7-10.5 7-10.5-7-10.5-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+        <label for="mqttTopic">MQTT topic</label>
+        <input id="mqttTopic" type="text">
+        <div class="toggle-row">
+          <label for="mqttUseTls">Use TLS</label>
+          <input id="mqttUseTls" type="checkbox">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Recipients</h2>
+      <div class="subtitle" style="margin-bottom: 0.5rem;">Send every notification to all of these. Leave empty to use the default provider above.</div>
+      <div id="recipientsList"></div>
+      <button class="secondary" id="addRecipientBtn" type="button">+ Add recipient</button>
+    </div>
+  </div>
+
+  <div class="tab-panel" data-panel="filters">
+    <div class="card">
+      <h2>App filter</h2>
+      <div class="toggle-row">
+        <label for="filterEnabled">Only forward listed apps</label>
+        <input id="filterEnabled" type="checkbox">
+      </div>
+      <label for="allowedApps">Allowed apps (comma-separated)</label>
+      <input id="allowedApps" type="text" placeholder="Teams, WhatsApp, Telegram, Phone, Messages">
+    </div>
+
+    <div class="card">
+      <h2>Do Not Disturb</h2>
+      <div class="toggle-row">
+        <label for="dndEnabled">Silence notifications during this window</label>
+        <input id="dndEnabled" type="checkbox">
+      </div>
+      <div class="hour-row">
+        <div>
+          <label for="dndStartHour">Start hour (UTC)</label>
+          <input id="dndStartHour" type="number" min="0" max="23">
+        </div>
+        <div>
+          <label for="dndEndHour">End hour (UTC)</label>
+          <input id="dndEndHour" type="number" min="0" max="23">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Per-app priority</h2>
+      <div id="prioritiesList"></div>
+      <button class="secondary" id="addPriorityBtn" type="button">+ Add app priority</button>
+    </div>
+  </div>
+
+  <div class="tab-panel" data-panel="log">
+    <div class="card">
+      <h2>Recent notifications</h2>
+      <div class="subtitle" style="margin-bottom: 0.5rem;">Last 20 notifications ANCS delivered, most recent first. Resets on reboot.</div>
+      <div id="logList"></div>
+      <button class="secondary" id="refreshLogBtn" type="button">Refresh</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <button id="saveBtn">Save</button>
+    <div id="saveMsg"></div>
+  </div>
+
+  <script>
+    const providerSelect = document.getElementById('provider');
+    const recipientsList = document.getElementById('recipientsList');
+    const prioritiesList = document.getElementById('prioritiesList');
+
+    const EYE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12s3.75-7 10.5-7 10.5 7 10.5 7-3.75 7-10.5 7-10.5-7-10.5-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+    const EYE_OFF_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.2A10.9 10.9 0 0 1 12 5c6.75 0 10.5 7 10.5 7a13.5 13.5 0 0 1-3.3 4.1M6.6 6.6C3.4 8.5 1.5 12 1.5 12s3.75 7 10.5 7a10.4 10.4 0 0 0 4-.8"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
+
+    // Delegated so it works for both the static provider/MQTT fields and the
+    // dynamically-added Recipients rows — no per-field wiring needed.
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('.secret-toggle');
+      if (!btn) return;
+      const input = btn.previousElementSibling;
+      const revealed = input.type === 'text';
+      input.type = revealed ? 'password' : 'text';
+      btn.classList.toggle('active', !revealed);
+      btn.innerHTML = revealed ? EYE_ICON : EYE_OFF_ICON;
+    });
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.panel === btn.dataset.tab));
+      });
+    });
+
+    function showFieldsFor(provider) {
+      document.querySelectorAll('.field').forEach(el => {
+        el.classList.toggle('active', el.dataset.provider === String(provider));
+      });
+    }
+
+    function recipientRow(r) {
+      r = r || { type: 'bark', key: '', token: '', user: '' };
+      const row = document.createElement('div');
+      row.className = 'list-row';
+      row.innerHTML = `
+        <div>
+          <select class="r-type">
+            <option value="bark">Bark</option>
+            <option value="pushover">Pushover</option>
+          </select>
+          <div class="secret-wrap r-bark-wrap">
+            <input class="r-bark" type="password" placeholder="Bark device key">
+            <button class="secret-toggle" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12s3.75-7 10.5-7 10.5 7 10.5 7-3.75 7-10.5 7-10.5-7-10.5-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          </div>
+          <div class="secret-wrap r-po-token-wrap hidden">
+            <input class="r-po-token" type="password" placeholder="Pushover token">
+            <button class="secret-toggle" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12s3.75-7 10.5-7 10.5 7 10.5 7-3.75 7-10.5 7-10.5-7-10.5-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          </div>
+          <div class="secret-wrap r-po-user-wrap hidden">
+            <input class="r-po-user" type="password" placeholder="Pushover user key">
+            <button class="secret-toggle" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12s3.75-7 10.5-7 10.5 7 10.5 7-3.75 7-10.5 7-10.5-7-10.5-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          </div>
+        </div>
+        <button class="remove-btn" type="button">&times;</button>`;
+      row.querySelector('.r-type').value = r.type;
+      row.querySelector('.r-bark').value = r.key || '';
+      row.querySelector('.r-po-token').value = r.token || '';
+      row.querySelector('.r-po-user').value = r.user || '';
+      const updateVisibility = () => {
+        const t = row.querySelector('.r-type').value;
+        row.querySelector('.r-bark-wrap').classList.toggle('hidden', t !== 'bark');
+        row.querySelector('.r-po-token-wrap').classList.toggle('hidden', t !== 'pushover');
+        row.querySelector('.r-po-user-wrap').classList.toggle('hidden', t !== 'pushover');
+      };
+      row.querySelector('.r-type').addEventListener('change', updateVisibility);
+      row.querySelector('.remove-btn').addEventListener('click', () => row.remove());
+      updateVisibility();
+      recipientsList.appendChild(row);
+    }
+
+    function priorityRow(app, level) {
+      const row = document.createElement('div');
+      row.className = 'list-row';
+      row.innerHTML = `
+        <div><input class="p-app" type="text" placeholder="App name (e.g. Teams)"></div>
+        <div>
+          <select class="p-level">
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <button class="remove-btn" type="button">&times;</button>`;
+      row.querySelector('.p-app').value = app || '';
+      row.querySelector('.p-level').value = level || 'high';
+      row.querySelector('.remove-btn').addEventListener('click', () => row.remove());
+      prioritiesList.appendChild(row);
+    }
+
+    document.getElementById('addRecipientBtn').addEventListener('click', () => recipientRow());
+    document.getElementById('addPriorityBtn').addEventListener('click', () => priorityRow('', 'high'));
+
+    async function loadConfig() {
+      const res = await fetch('/api/config');
+      const cfg = await res.json();
+      providerSelect.value = cfg.activeNotifier;
+      document.getElementById('barkKey').value = cfg.barkKey || '';
+      document.getElementById('pushoverToken').value = cfg.pushoverToken || '';
+      document.getElementById('pushoverUser').value = cfg.pushoverUser || '';
+      document.getElementById('mqttBroker').value = cfg.mqttBroker || '';
+      document.getElementById('mqttPort').value = cfg.mqttPort || 1883;
+      document.getElementById('mqttUser').value = cfg.mqttUser || '';
+      document.getElementById('mqttPassword').value = cfg.mqttPassword || '';
+      document.getElementById('mqttTopic').value = cfg.mqttTopic || '';
+      document.getElementById('mqttUseTls').checked = !!cfg.mqttUseTls;
+      showFieldsFor(cfg.activeNotifier);
+
+      document.getElementById('filterEnabled').checked = !!cfg.filterEnabled;
+      document.getElementById('allowedApps').value = cfg.allowedApps || '';
+      document.getElementById('dndEnabled').checked = !!cfg.dndEnabled;
+      document.getElementById('dndStartHour').value = cfg.dndStartHour ?? 23;
+      document.getElementById('dndEndHour').value = cfg.dndEndHour ?? 8;
+
+      recipientsList.innerHTML = '';
+      (cfg.recipients || []).forEach(recipientRow);
+
+      prioritiesList.innerHTML = '';
+      Object.entries(cfg.priorities || {}).forEach(([app, level]) => priorityRow(app, level));
+    }
+
+    async function loadStatus() {
+      const res = await fetch('/api/status');
+      const s = await res.json();
+      document.getElementById('bleDot').className = 'dot ' + (s.bleConnected ? 'ok' : 'bad');
+      document.getElementById('bleStatus').textContent = s.bleConnected ? 'Connected' : 'Disconnected';
+      document.getElementById('ancsStatus').textContent = s.ancsReady ? 'Ready' : 'Not ready';
+      document.getElementById('wifiStatus').textContent = s.wifiConnected ? `${s.ipAddress} (${s.wifiRssi} dBm)` : 'Disconnected';
+      document.getElementById('uptime').textContent = Math.floor(s.uptimeSeconds / 60) + ' min';
+      document.getElementById('firmware').textContent = 'v' + s.firmwareVersion;
+    }
+
+    async function loadStats() {
+      const res = await fetch('/api/stats');
+      const s = await res.json();
+      document.getElementById('statReceived').textContent = s.notifications_received ?? 0;
+      document.getElementById('statForwarded').textContent = s.notifications_forwarded ?? 0;
+      document.getElementById('statFiltered').textContent = s.notifications_filtered ?? 0;
+      const topApps = document.getElementById('topApps');
+      topApps.innerHTML = '';
+      (s.top_apps || []).forEach(a => {
+        const row = document.createElement('div');
+        row.className = 'top-app-row';
+        row.innerHTML = `<span>${a.app}</span><span>${a.count}</span>`;
+        topApps.appendChild(row);
+      });
+    }
+
+    const STATUS_LABELS = {
+      forwarded: 'Forwarded',
+      failed: 'Failed',
+      filtered_app: 'Filtered (app)',
+      filtered_dnd: 'Filtered (DND)',
+    };
+
+    function formatAge(seconds) {
+      if (seconds < 60) return `${seconds}s ago`;
+      if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+      return `${Math.floor(seconds / 3600)}h ago`;
+    }
+
+    async function loadLog() {
+      const res = await fetch('/api/log');
+      const entries = await res.json();
+      const list = document.getElementById('logList');
+      list.innerHTML = '';
+      if (!entries.length) {
+        const empty = document.createElement('div');
+        empty.className = 'log-empty';
+        empty.textContent = 'No notifications yet.';
+        list.appendChild(empty);
+        return;
+      }
+      entries.forEach(e => {
+        const row = document.createElement('div');
+        row.className = 'log-entry';
+
+        const top = document.createElement('div');
+        top.className = 'log-top';
+        const app = document.createElement('span');
+        app.className = 'log-app';
+        app.textContent = e.app;
+        const age = document.createElement('span');
+        age.className = 'log-age';
+        age.textContent = formatAge(e.ageSeconds);
+        top.append(app, age);
+        row.appendChild(top);
+
+        if (e.title) {
+          const title = document.createElement('div');
+          title.className = 'log-title';
+          title.textContent = e.title;
+          row.appendChild(title);
+        }
+        if (e.body) {
+          const body = document.createElement('div');
+          body.className = 'log-body';
+          body.textContent = e.body;
+          row.appendChild(body);
+        }
+
+        const badge = document.createElement('span');
+        badge.className = 'log-badge ' + e.status;
+        badge.textContent = STATUS_LABELS[e.status] || e.status;
+        row.appendChild(badge);
+
+        list.appendChild(row);
+      });
+    }
+
+    document.getElementById('refreshLogBtn').addEventListener('click', loadLog);
+
+    providerSelect.addEventListener('change', () => showFieldsFor(providerSelect.value));
+
+    document.getElementById('saveBtn').addEventListener('click', async () => {
+      const recipients = Array.from(recipientsList.children).map(row => {
+        const type = row.querySelector('.r-type').value;
+        return {
+          type,
+          key: row.querySelector('.r-bark').value,
+          token: row.querySelector('.r-po-token').value,
+          user: row.querySelector('.r-po-user').value,
+        };
+      });
+
+      const priorities = {};
+      Array.from(prioritiesList.children).forEach(row => {
+        const app = row.querySelector('.p-app').value.trim();
+        if (app) priorities[app] = row.querySelector('.p-level').value;
+      });
+
+      const body = {
+        activeNotifier: Number(providerSelect.value),
+        barkKey: document.getElementById('barkKey').value,
+        pushoverToken: document.getElementById('pushoverToken').value,
+        pushoverUser: document.getElementById('pushoverUser').value,
+        mqttBroker: document.getElementById('mqttBroker').value,
+        mqttPort: Number(document.getElementById('mqttPort').value),
+        mqttUser: document.getElementById('mqttUser').value,
+        mqttPassword: document.getElementById('mqttPassword').value,
+        mqttTopic: document.getElementById('mqttTopic').value,
+        mqttUseTls: document.getElementById('mqttUseTls').checked,
+        filterEnabled: document.getElementById('filterEnabled').checked,
+        allowedApps: document.getElementById('allowedApps').value,
+        dndEnabled: document.getElementById('dndEnabled').checked,
+        dndStartHour: Number(document.getElementById('dndStartHour').value),
+        dndEndHour: Number(document.getElementById('dndEndHour').value),
+        recipients,
+        priorities,
+      };
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const msg = document.getElementById('saveMsg');
+      msg.textContent = res.ok ? 'Saved' : 'Save failed';
+      setTimeout(() => msg.textContent = '', 2000);
+    });
+
+    document.getElementById('refreshBtn').addEventListener('click', () => {
+      loadStatus();
+      loadStats();
+    });
+
+    // No automatic polling: the ESP32's TCP stack is easily overwhelmed by
+    // sustained periodic requests while a BLE session is also active. Status
+    // and stats are loaded once on page load and otherwise only on demand via
+    // the Refresh button.
+    loadConfig();
+    loadStatus();
+    loadStats();
+    loadLog();
+  </script>
+</body>
+</html>
