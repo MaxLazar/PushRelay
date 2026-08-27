@@ -5,6 +5,11 @@ PushRelay is ESP32 firmware that connects to an iPhone as a BLE peripheral
 Notification Center Service), and forwards them — app name, title, body — to a
 delivery provider: **Bark**, **Pushover**, or an **MQTT** broker.
 
+> **Terminology:** the web admin UI labels this feature "Notification Center" —
+> Apple's own consumer-facing name for what it's actually relaying. This README
+> keeps using **ANCS** (Apple Notification Center *Service*) when talking about
+> the underlying BLE protocol/implementation, since that's the precise term.
+
 **Feature-complete:** WiFi setup, ANCS interception, a tabbed web admin UI,
 watchdog/auto-restart, LED status, deduplication, OTA updates, app-allowlist
 filtering, a Do Not Disturb schedule, per-app priority mapping, in-memory
@@ -174,9 +179,19 @@ The onboard LED (GPIO2) reports state at a glance:
 - **Backlog suppression:** on every (re)connect, ANCS resends "Added" events
   for *every* notification still sitting in the phone's Notification Center,
   not just new ones — without this, a reconnect would re-forward the entire
-  backlog (old calendar reminders, days-old messages, etc.). Notifications
-  arriving within 4 seconds of ANCS becoming ready are treated as backlog and
-  dropped silently; anything after that is forwarded normally.
+  backlog (old calendar reminders, days-old messages, etc.). Two layers filter
+  this out (configurable — see [Backlog filtering](#backlog-filtering)):
+  - Notifications arriving within 15 seconds of ANCS becoming ready are
+    treated as backlog and dropped silently — this catches the immediate
+    burst most reconnects produce.
+  - Slower-trickling backlog is caught with an actual age check against
+    ANCS's own `Date` attribute. That attribute is the phone's *local* time,
+    not UTC, so it needs a UTC-offset correction first — either a manual
+    "Phone timezone offset" setting in the admin UI, or auto-calibration from
+    live traffic (two notifications agreeing on the same offset, quantized to
+    the nearest 15 minutes, before it's trusted — a single sample could
+    itself be backlog and calibrate against the wrong value). Until an offset
+    is known, this layer is a no-op and only the timing window above applies.
 - **WiFi/BLE radio coexistence:** the ESP32 has a single 2.4GHz radio shared
   by WiFi and Bluetooth. The firmware explicitly prioritizes Bluetooth's radio
   time (`esp_coex_preference_set(ESP_COEX_PREFER_BT)`) since ANCS is the
@@ -193,9 +208,11 @@ app required). The page is split into four tabs:
   version — tap **Refresh** to update, see the stability note below) and the
   **Statistics** card
 - **Provider** — the default delivery provider (Bark / Pushover / MQTT) and
-  its credentials, plus **Recipients** for fanning out to more than one
-  destination
-- **Filters** — app allowlist filtering, Do Not Disturb, and per-app priority
+  its credentials, **Recipients** for fanning out to more than one
+  destination, and **Message format** for customizing the forwarded text (see
+  [Message format](#message-format))
+- **Filters** — app allowlist filtering, Do Not Disturb, per-app priority, and
+  [Backlog filtering](#backlog-filtering)
 - **Log** — the last 20 notifications ANCS delivered, with full detail (see
   [Notification log](#notification-log))
 
@@ -303,6 +320,25 @@ Add rows under **Per-app priority** mapping an app name to `critical` / `high` /
 
 Apps with no rule use the default level (`timeSensitive` on Bark, `0` on Pushover).
 
+## Backlog filtering
+
+On every (re)connect, ANCS resends "Added" events for *every* notification
+still sitting in the phone's Notification Center, not just new ones — see
+[Reliability](#reliability) for why this needs filtering at all. Most of it is
+caught automatically by an arrival-timing window; the **Phone timezone
+offset** field on the Filters tab lets you speed up the second layer, an
+actual age check, which otherwise waits to auto-calibrate from live traffic:
+
+- Pick your phone's UTC offset from the dropdown (covers the standard set of
+  real-world timezone offsets, UTC-12:00 through UTC+14:00, including the
+  half/quarter-hour ones) to activate the age check immediately.
+- Leave it blank (the default) to auto-detect: once two notifications agree on
+  the same offset, it's trusted and used from then on. Until then, only the
+  timing window filters backlog.
+
+The offset needs updating manually if you travel across timezones or clear it
+back to blank to let auto-detection re-calibrate.
+
 ## Statistics
 
 The admin UI's **Statistics** card and `GET /api/stats` show notifications
@@ -355,6 +391,36 @@ PushRelay falls back to the single **Default provider** section above. Bark
 and Pushover recipients both deliver; MQTT is default-provider-only (see
 [Configuring MQTT](#configuring-mqtt)).
 
+## Message format
+
+By default each provider formats the forwarded message its own way (Bark uses
+a title/body split, Pushover prefixes the title onto the message, MQTT sends
+title and body as separate JSON fields). The **Message format** section on the
+Provider tab lets you override the body text with a custom template instead,
+built out of `{token}` placeholders:
+
+| Token | Value |
+| --- | --- |
+| `{app}` | App name, e.g. `Teams` |
+| `{title}` | Notification title (falls back to the app name if empty) |
+| `{body}` | Notification body |
+| `{date}` | Date the notification was forwarded, `YYYY-MM-DD` |
+| `{time}` | Time the notification was forwarded, `HH:MM:SS` |
+| `{datetime}` | `{date}` and `{time}` combined |
+| `{priority}` | Resolved priority (`critical`/`high`/`low`/`default`) |
+| `{sourceDate}` | Date the notification was originally created on the iPhone, `YYYY-MM-DD` |
+| `{sourceTime}` | Time the notification was originally created on the iPhone, `HH:MM:SS` |
+| `{sourceDatetime}` | `{sourceDate}` and `{sourceTime}` combined |
+
+`{date}`/`{time}`/`{datetime}` reflect when PushRelay forwarded the message;
+`{sourceDate}`/`{sourceTime}`/`{sourceDatetime}` come from ANCS's own `Date`
+attribute — the phone's local time when the notification was created. The
+source fields render empty if ANCS doesn't supply a date for a given
+notification.
+
+Click a token chip in the admin UI to insert it at the cursor. Leave the field
+blank to keep each provider's default formatting.
+
 ## Troubleshooting
 
 | Symptom | Likely cause |
@@ -370,6 +436,7 @@ and Pushover recipients both deliver; MQTT is default-provider-only (see
 | OTA upload rejected | Wrong `--auth` password, or it doesn't match `OTA_PASSWORD` in `secrets.h` |
 | Notifications silently stop during certain hours | Check the **Do Not Disturb** window — remember it's UTC, not local time |
 | Only some apps forward | Check **App filter** — if enabled, only apps on the allowlist are forwarded |
+| Old/backlog notifications get forwarded after a reconnect | See [Backlog filtering](#backlog-filtering) — set the **Phone timezone offset** manually instead of waiting on auto-detection |
 | Testing on a Mac, nothing ever arrives | ANCS appears not to be exposed to third-party accessories on macOS at all — use an iPhone instead |
 
 ## Known limitations

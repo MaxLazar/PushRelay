@@ -8,6 +8,7 @@
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <time.h>
 
 // A single parsed ANCS notification, ready to hand off to a notifier.
 struct Notification {
@@ -15,8 +16,75 @@ struct Notification {
     String appName; // human-readable, e.g. "Teams"
     String title;
     String body;
-    uint32_t uid;   // ANCS notification UID, used for dedup in Phase 2
+    uint32_t uid;      // ANCS notification UID, used for dedup in Phase 2
+    // Raw ANCS Date attribute: "YYYYMMDD'T'HHMMSS" (ISO 8601 basic format),
+    // the phone's local time when the notification was originally created —
+    // not when PushRelay received or forwarded it. Empty if ANCS didn't
+    // return one (older iOS versions, or some app-generated notifications).
+    String sourceDate;
 };
+
+// Splits an ANCS "YYYYMMDD'T'HHMMSS" Date attribute into separate date/time
+// strings. Leaves both empty if `raw` doesn't match the expected format.
+inline void parseAncsDate(const String& raw, String& dateOut, String& timeOut) {
+    if (raw.length() < 15 || raw[8] != 'T') return;
+    dateOut = raw.substring(0, 4) + "-" + raw.substring(4, 6) + "-" + raw.substring(6, 8);
+    timeOut = raw.substring(9, 11) + ":" + raw.substring(11, 13) + ":" + raw.substring(13, 15);
+}
+
+// Parses an ANCS "YYYYMMDD'T'HHMMSS" Date attribute into a Unix timestamp,
+// treating the fields as if they were UTC. This is NOT the real creation
+// instant — ANCS reports the phone's LOCAL time, so the result needs a
+// UTC-offset correction (see AncsManager's backlog-staleness filter in
+// ancs.h) before it means anything. Returns 0 if `raw` doesn't match the
+// expected format.
+inline time_t parseAncsDateNaive(const String& raw) {
+    if (raw.length() < 15 || raw[8] != 'T') return 0;
+    struct tm t = {};
+    t.tm_year = raw.substring(0, 4).toInt() - 1900;
+    t.tm_mon = raw.substring(4, 6).toInt() - 1;
+    t.tm_mday = raw.substring(6, 8).toInt();
+    t.tm_hour = raw.substring(9, 11).toInt();
+    t.tm_min = raw.substring(11, 13).toInt();
+    t.tm_sec = raw.substring(13, 15).toInt();
+    t.tm_isdst = 0;
+    return mktime(&t);
+}
+
+// Renders a user-defined message template by substituting `{token}`
+// placeholders with fields of the notification being forwarded. Unknown
+// tokens are left as-is. Used to let the admin UI customize what actually
+// gets sent to a provider instead of the hardcoded title/body split.
+inline String renderMessageTemplate(const String& tmpl, const Notification& n, const String& priority) {
+    String out = tmpl;
+
+    char dateBuf[16] = "";
+    char timeBuf[16] = "";
+    char datetimeBuf[32] = "";
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo, 50)) {
+        strftime(dateBuf, sizeof(dateBuf), "%Y-%m-%d", &timeinfo);
+        strftime(timeBuf, sizeof(timeBuf), "%H:%M:%S", &timeinfo);
+        strftime(datetimeBuf, sizeof(datetimeBuf), "%Y-%m-%d %H:%M", &timeinfo);
+    }
+
+    String sourceDate, sourceTime;
+    parseAncsDate(n.sourceDate, sourceDate, sourceTime);
+    String sourceDatetime = sourceDate.length() ? sourceDate + " " + sourceTime : "";
+
+    out.replace("{app}", n.appName);
+    out.replace("{title}", n.title.isEmpty() ? n.appName : n.title);
+    out.replace("{body}", n.body);
+    out.replace("{priority}", priority);
+    out.replace("{uid}", String(n.uid));
+    out.replace("{date}", dateBuf);
+    out.replace("{time}", timeBuf);
+    out.replace("{datetime}", datetimeBuf);
+    out.replace("{sourceDate}", sourceDate);
+    out.replace("{sourceTime}", sourceTime);
+    out.replace("{sourceDatetime}", sourceDatetime);
+    return out;
+}
 
 // Common interface implemented by every delivery provider.
 class BaseNotifier {

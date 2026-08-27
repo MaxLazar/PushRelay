@@ -71,7 +71,21 @@
     box-sizing: border-box; font-size: 0.875rem; color: var(--ix-text); background: var(--ix-bg-card);
     border: 1px solid var(--ix-border-std); border-radius: var(--ix-radius);
   }
-  select:focus, input:focus { outline: 2px solid var(--ix-primary); outline-offset: -1px; }
+  select:focus, input:focus, textarea:focus { outline: 2px solid var(--ix-primary); outline-offset: -1px; }
+  textarea {
+    width: 100%; padding: var(--ix-space-sm); margin-top: var(--ix-space-xs);
+    box-sizing: border-box; font-size: 0.8125rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--ix-text); background: var(--ix-bg-card); border: 1px solid var(--ix-border-std);
+    border-radius: var(--ix-radius); resize: vertical;
+  }
+  .chip-list { display: flex; flex-wrap: wrap; gap: var(--ix-space-xs); }
+  .chip {
+    width: auto; height: auto; margin-top: 0; padding: 0.2rem 0.5rem;
+    font-size: 0.6875rem; font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--ix-primary); background: transparent; border: 1px solid var(--ix-border-soft);
+    border-radius: var(--ix-radius); cursor: pointer;
+  }
+  .chip:active { background: color-mix(in srgb, var(--ix-primary) 15%, transparent); }
   button {
     width: 100%; height: var(--ix-control-h); padding: 0 var(--ix-space-lg); margin-top: var(--ix-space-xl);
     font-size: 0.875rem; font-weight: 700; border: none; border-radius: var(--ix-radius);
@@ -139,7 +153,7 @@
 </head>
 <body>
   <h1>PushRelay</h1>
-  <div class="subtitle">Forwards iPhone notifications from ANCS to your provider.</div>
+  <div class="subtitle">Forwards iPhone notifications from Notification Center to your provider.</div>
 
   <div class="tabs">
     <button class="tab-btn active" data-tab="home" type="button">Home</button>
@@ -151,7 +165,7 @@
   <div class="tab-panel active" data-panel="home">
     <div class="card">
       <div class="row"><span><span id="bleDot" class="dot bad"></span>BLE</span><span id="bleStatus">—</span></div>
-      <div class="row"><span>ANCS</span><span id="ancsStatus">—</span></div>
+      <div class="row"><span>Notification Center</span><span id="ancsStatus">—</span></div>
       <div class="row"><span>WiFi</span><span id="wifiStatus">—</span></div>
       <div class="row"><span>Uptime</span><span id="uptime">—</span></div>
       <div class="row"><span>Firmware</span><span id="firmware">—</span></div>
@@ -225,6 +239,24 @@
       <div id="recipientsList"></div>
       <button class="secondary" id="addRecipientBtn" type="button">+ Add recipient</button>
     </div>
+
+    <div class="card">
+      <h2>Message format</h2>
+      <div class="subtitle" style="margin-bottom: 0.5rem;">Customize the text forwarded to your provider(s). Click a field to insert it at the cursor. Leave blank to use each provider's default format.</div>
+      <div class="chip-list" id="templateChips">
+        <button class="chip" type="button" data-token="{app}" title="App name, e.g. Teams">{app}</button>
+        <button class="chip" type="button" data-token="{title}" title="Notification title (falls back to the app name if empty)">{title}</button>
+        <button class="chip" type="button" data-token="{body}" title="Notification body">{body}</button>
+        <button class="chip" type="button" data-token="{date}" title="Date forwarded, YYYY-MM-DD">{date}</button>
+        <button class="chip" type="button" data-token="{time}" title="Time forwarded, HH:MM:SS">{time}</button>
+        <button class="chip" type="button" data-token="{datetime}" title="Date and time forwarded combined">{datetime}</button>
+        <button class="chip" type="button" data-token="{priority}" title="Resolved priority: critical / high / low / default">{priority}</button>
+        <button class="chip" type="button" data-token="{sourceDate}" title="Date the notification was originally created on the iPhone, YYYY-MM-DD">{sourceDate}</button>
+        <button class="chip" type="button" data-token="{sourceTime}" title="Time the notification was originally created on the iPhone, HH:MM:SS">{sourceTime}</button>
+        <button class="chip" type="button" data-token="{sourceDatetime}" title="Original creation date and time combined">{sourceDatetime}</button>
+      </div>
+      <textarea id="messageTemplate" rows="3" placeholder="e.g. {date} {time} — {app}: {title}"></textarea>
+    </div>
   </div>
 
   <div class="tab-panel" data-panel="filters">
@@ -261,12 +293,59 @@
       <div id="prioritiesList"></div>
       <button class="secondary" id="addPriorityBtn" type="button">+ Add app priority</button>
     </div>
+
+    <div class="card">
+      <h2>Backlog filtering</h2>
+      <div class="subtitle" style="margin-bottom: 0.5rem;">On reconnect, ANCS resends old Notification Center items along with new ones. PushRelay filters those out using an arrival-timing window, plus an actual age check once your phone's timezone offset is known. Leave blank to auto-detect the offset from live traffic (takes a couple of notifications).</div>
+      <label for="phoneUtcOffset">Phone timezone offset (UTC)</label>
+      <select id="phoneUtcOffset">
+        <option value="">Auto-detect</option>
+        <option value="-720">UTC-12:00</option>
+        <option value="-660">UTC-11:00</option>
+        <option value="-600">UTC-10:00</option>
+        <option value="-570">UTC-09:30</option>
+        <option value="-540">UTC-09:00</option>
+        <option value="-480">UTC-08:00</option>
+        <option value="-420">UTC-07:00</option>
+        <option value="-360">UTC-06:00</option>
+        <option value="-300">UTC-05:00</option>
+        <option value="-240">UTC-04:00</option>
+        <option value="-210">UTC-03:30</option>
+        <option value="-180">UTC-03:00</option>
+        <option value="-120">UTC-02:00</option>
+        <option value="-60">UTC-01:00</option>
+        <option value="0">UTC+00:00</option>
+        <option value="60">UTC+01:00</option>
+        <option value="120">UTC+02:00</option>
+        <option value="180">UTC+03:00</option>
+        <option value="210">UTC+03:30</option>
+        <option value="240">UTC+04:00</option>
+        <option value="270">UTC+04:30</option>
+        <option value="300">UTC+05:00</option>
+        <option value="330">UTC+05:30</option>
+        <option value="345">UTC+05:45</option>
+        <option value="360">UTC+06:00</option>
+        <option value="390">UTC+06:30</option>
+        <option value="420">UTC+07:00</option>
+        <option value="480">UTC+08:00</option>
+        <option value="525">UTC+08:45</option>
+        <option value="540">UTC+09:00</option>
+        <option value="570">UTC+09:30</option>
+        <option value="600">UTC+10:00</option>
+        <option value="630">UTC+10:30</option>
+        <option value="660">UTC+11:00</option>
+        <option value="720">UTC+12:00</option>
+        <option value="765">UTC+12:45</option>
+        <option value="780">UTC+13:00</option>
+        <option value="840">UTC+14:00</option>
+      </select>
+    </div>
   </div>
 
   <div class="tab-panel" data-panel="log">
     <div class="card">
       <h2>Recent notifications</h2>
-      <div class="subtitle" style="margin-bottom: 0.5rem;">Last 20 notifications ANCS delivered, most recent first. Resets on reboot.</div>
+      <div class="subtitle" style="margin-bottom: 0.5rem;">Last 20 notifications relayed from Notification Center, most recent first. Resets on reboot.</div>
       <div id="logList"></div>
       <button class="secondary" id="refreshLogBtn" type="button">Refresh</button>
     </div>
@@ -308,12 +387,37 @@
       btn.innerHTML = revealed ? EYE_ICON : EYE_OFF_ICON;
     });
 
-    document.querySelectorAll('.tab-btn').forEach(btn => {
+    document.getElementById('templateChips').addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip');
+      if (!chip) return;
+      const field = document.getElementById('messageTemplate');
+      const token = chip.dataset.token;
+      const start = field.selectionStart ?? field.value.length;
+      const end = field.selectionEnd ?? field.value.length;
+      field.value = field.value.slice(0, start) + token + field.value.slice(end);
+      field.focus();
+      field.selectionStart = field.selectionEnd = start + token.length;
+    });
+
+    const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
+    const validTabs = tabButtons.map(b => b.dataset.tab);
+
+    function showTab(tab) {
+      if (!validTabs.includes(tab)) tab = validTabs[0];
+      tabButtons.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.panel === tab));
+    }
+
+    tabButtons.forEach(btn => {
       btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
-        document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.panel === btn.dataset.tab));
+        // Just updates the hash — the 'hashchange' listener below does the
+        // actual tab switch, so back/forward and a pasted #tab link work too.
+        location.hash = btn.dataset.tab;
       });
     });
+
+    window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
+    showTab(location.hash.slice(1));
 
     function showFieldsFor(provider) {
       document.querySelectorAll('.field').forEach(el => {
@@ -409,6 +513,12 @@
 
       prioritiesList.innerHTML = '';
       Object.entries(cfg.priorities || {}).forEach(([app, level]) => priorityRow(app, level));
+
+      document.getElementById('messageTemplate').value = cfg.messageTemplate || '';
+
+      document.getElementById('phoneUtcOffset').value =
+        (cfg.phoneUtcOffsetMinutes === null || cfg.phoneUtcOffsetMinutes === undefined)
+          ? '' : String(cfg.phoneUtcOffsetMinutes);
     }
 
     async function loadStatus() {
@@ -547,6 +657,11 @@
         dndEndHour: Number(document.getElementById('dndEndHour').value),
         recipients,
         priorities,
+        messageTemplate: document.getElementById('messageTemplate').value,
+        phoneUtcOffsetMinutes: (() => {
+          const raw = document.getElementById('phoneUtcOffset').value;
+          return raw === '' ? null : Number(raw);
+        })(),
       };
       const res = await fetch('/api/config', {
         method: 'POST',

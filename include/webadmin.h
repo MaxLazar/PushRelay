@@ -46,6 +46,17 @@ struct RuntimeConfig {
 
     String prioritiesJson = "{}"; // { "AppName": "critical"|"high"|"low" }
 
+    // Optional {token}-based template overriding the forwarded message body
+    // (see renderMessageTemplate in notifiers.h). Empty means keep each
+    // provider's built-in default formatting.
+    String messageTemplate;
+
+    // Manual override for the phone's UTC offset, used by AncsManager's
+    // backlog-staleness filter (see ancs.h). If unset, the offset is
+    // auto-calibrated from live traffic instead.
+    bool phoneUtcOffsetSet = false;
+    int16_t phoneUtcOffsetMinutes = 0;
+
     std::vector<Recipient> recipients;
 
     // True if `appName` should be forwarded given the current filter settings.
@@ -138,6 +149,9 @@ public:
         config.dndStartHour = prefs.getUChar("dndStart", 23);
         config.dndEndHour = prefs.getUChar("dndEnd", 8);
         config.prioritiesJson = prefs.getString("priorities", "{}");
+        config.messageTemplate = prefs.getString("msgTmpl", "");
+        config.phoneUtcOffsetSet = prefs.getBool("tzSet", false);
+        config.phoneUtcOffsetMinutes = prefs.getShort("tzOffMin", 0);
         config.deserializeRecipients(prefs.getString("recipients", "[]"));
         prefs.end();
     }
@@ -161,6 +175,9 @@ public:
         prefs.putUChar("dndStart", config.dndStartHour);
         prefs.putUChar("dndEnd", config.dndEndHour);
         prefs.putString("priorities", config.prioritiesJson);
+        prefs.putString("msgTmpl", config.messageTemplate);
+        prefs.putBool("tzSet", config.phoneUtcOffsetSet);
+        prefs.putShort("tzOffMin", config.phoneUtcOffsetMinutes);
         prefs.putString("recipients", config.serializeRecipients());
         prefs.end();
     }
@@ -199,6 +216,9 @@ public:
             JsonDocument prioritiesDoc;
             deserializeJson(prioritiesDoc, config.prioritiesJson);
             doc["priorities"] = prioritiesDoc;
+            doc["messageTemplate"] = config.messageTemplate;
+            if (config.phoneUtcOffsetSet) doc["phoneUtcOffsetMinutes"] = config.phoneUtcOffsetMinutes;
+            else doc["phoneUtcOffsetMinutes"] = nullptr;
             JsonDocument recipientsDoc;
             deserializeJson(recipientsDoc, config.serializeRecipients());
             doc["recipients"] = recipientsDoc;
@@ -235,6 +255,14 @@ public:
                     String out;
                     serializeJson(doc["priorities"], out);
                     config.prioritiesJson = out;
+                }
+                if (doc["messageTemplate"].is<const char*>()) config.messageTemplate = doc["messageTemplate"].as<String>();
+                if (doc["phoneUtcOffsetMinutes"].is<int>()) {
+                    config.phoneUtcOffsetSet = true;
+                    config.phoneUtcOffsetMinutes = (int16_t)doc["phoneUtcOffsetMinutes"].as<int>();
+                } else if (doc["phoneUtcOffsetMinutes"].isNull()) {
+                    config.phoneUtcOffsetSet = false;
+                    config.phoneUtcOffsetMinutes = 0;
                 }
                 if (doc["recipients"].is<JsonArray>()) {
                     String out;

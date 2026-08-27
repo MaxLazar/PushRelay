@@ -75,10 +75,19 @@ static void onAncsNotification(const Notification& n) {
 
     String priority = webAdmin.config.priorityForApp(n.appName);
 
+    // Apply the user's custom message-format template, if any, before the
+    // notification is filtered/logged/sent — everything downstream sees the
+    // rendered body so the log reflects exactly what was (or would have been)
+    // forwarded.
+    Notification outbound = n;
+    if (webAdmin.config.messageTemplate.length()) {
+        outbound.body = renderMessageTemplate(webAdmin.config.messageTemplate, n, priority);
+    }
+
     if (!webAdmin.config.isAppAllowed(n.appName)) {
         Serial.printf("[Main] Dropped (not on allowlist): %s\n", n.appName.c_str());
         stats.recordFiltered();
-        notifLog.add(n, priority, "filtered_app");
+        notifLog.add(outbound, priority, "filtered_app");
         return;
     }
 
@@ -87,21 +96,21 @@ static void onAncsNotification(const Notification& n) {
         webAdmin.config.isWithinDnd(timeinfo.tm_hour)) {
         Serial.printf("[Main] Dropped (DND window): %s\n", n.appName.c_str());
         stats.recordFiltered();
-        notifLog.add(n, priority, "filtered_dnd");
+        notifLog.add(outbound, priority, "filtered_dnd");
         return;
     }
 
     bool anySent = false;
 
     if (webAdmin.config.recipients.empty()) {
-        anySent = sendViaDefaultProvider(n, priority);
+        anySent = sendViaDefaultProvider(outbound, priority);
     } else {
         for (const Recipient& r : webAdmin.config.recipients) {
-            if (sendToRecipient(r, n, priority)) anySent = true;
+            if (sendToRecipient(r, outbound, priority)) anySent = true;
         }
     }
 
-    notifLog.add(n, priority, anySent ? "forwarded" : "failed");
+    notifLog.add(outbound, priority, anySent ? "forwarded" : "failed");
 
     if (anySent) {
         stats.recordForwarded();
@@ -163,6 +172,11 @@ void setup() {
 
     // 6. Start advertising for ANCS and wire up the notification callback.
     ancs.begin(BLE_DEVICE_NAME, onAncsNotification);
+    ancs.setManualUtcOffsetProvider([](int16_t& outMinutes) -> bool {
+        if (!webAdmin.config.phoneUtcOffsetSet) return false;
+        outMinutes = webAdmin.config.phoneUtcOffsetMinutes;
+        return true;
+    });
     lastBleOkMillis = millis();
 
     // 7. Task watchdog — reboots if the main loop ever stops running.

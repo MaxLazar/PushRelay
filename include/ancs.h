@@ -209,6 +209,12 @@ public:
     bool isPeerConnected() const { return peerConnected; }
     bool isAncsReady() const { return ancsReady; }
 
+    // Lets the caller supply a user-configured phone UTC offset (minutes) for
+    // the backlog-staleness filter below. `fn` should return true and set
+    // `minutes` if the admin UI has one configured, false to fall back to
+    // auto-calibration. See isStaleNotification().
+    void setManualUtcOffsetProvider(std::function<bool(int16_t&)> fn) { manualUtcOffsetFn = fn; }
+
 private:
     class ServerCallbacks : public NimBLEServerCallbacks {
     public:
@@ -343,7 +349,7 @@ private:
     }
 
     // Sends a GetNotificationAttributes command via the Control Point for the
-    // AppIdentifier, Title and Message attributes.
+    // AppIdentifier, Title, Message and Date attributes.
     void requestNotificationAttributes(uint32_t uid) {
         if (!controlPointChar) return;
 
@@ -366,6 +372,12 @@ private:
         cmd[i++] = (uint8_t)(ANCS_MAX_MESSAGE_LEN & 0xFF);
         cmd[i++] = (uint8_t)((ANCS_MAX_MESSAGE_LEN >> 8) & 0xFF);
 
+        // Date has no length field — unlike Title/Subtitle/Message, it isn't
+        // truncatable, per the ANCS spec. It comes back as a fixed 15-char
+        // ISO 8601 basic string: "YYYYMMDD'T'HHMMSS" (the phone's local time
+        // when the notification was originally created, not when we asked).
+        cmd[i++] = ANCS_ATTR_DATE;
+
         controlPointChar->writeValue(cmd, i, true);
     }
 
@@ -382,7 +394,7 @@ private:
         }
 
         size_t pos = 5;
-        String appId, title, message;
+        String appId, title, message, date;
         bool complete = true;
 
         while (pos < dataSourceBuffer.size()) {
@@ -401,11 +413,18 @@ private:
                 case ANCS_ATTR_APP_IDENTIFIER: appId = value; break;
                 case ANCS_ATTR_TITLE: title = value; break;
                 case ANCS_ATTR_MESSAGE: message = value; break;
+                case ANCS_ATTR_DATE: date = value; break;
                 default: break;
             }
         }
 
         if (!complete) return; // wait for the next fragment
+
+        if (isStaleNotification(date)) {
+            Serial.printf("[ANCS] Skipping stale notification uid=%u\n", pendingUid);
+            dataSourceBuffer.clear();
+            return;
+        }
 
         Notification n;
         n.uid = pendingUid;
@@ -413,6 +432,7 @@ private:
         n.appName = ancsFriendlyAppName(appId);
         n.title = title;
         n.body = message;
+        n.sourceDate = date;
 
         dataSourceBuffer.clear();
 
@@ -446,9 +466,73 @@ private:
     uint32_t nextClientAttemptMillis = 0;
     uint8_t clientConnectAttempts = 0;
 
-    // Backlog-suppression window — see handleNotificationSource().
-    static const uint32_t kBacklogSuppressWindowMs = 4000;
+    // Backlog-suppression window — see handleNotificationSource(). Catches
+    // the immediate burst of "Added" events ANCS resends right at (re)connect.
+    // Slower-trickling backlog (arriving after this window, e.g. an
+    // attribute response that took a while) is caught by isStaleNotification()
+    // below instead.
+    static const uint32_t kBacklogSuppressWindowMs = 15000;
     uint32_t ancsReadyMillis = 0;
+
+    // Content-based backlog filter, layered on top of the window above.
+    // ANCS's Date attribute is the phone's LOCAL time, not UTC — confirmed via
+    // live testing: an earlier version of this compared it to UTC directly,
+    // which made every real notification look hours old and silently dropped
+    // everything. This corrects for that with a UTC offset that's either
+    // user-configured (manualUtcOffsetFn) or auto-calibrated: two post-window
+    // notifications agreeing (once quantized to the nearest 15 minutes — real
+    // timezones sit on 15/30/45/60-minute boundaries) are required before the
+    // offset is trusted, since a single sample could itself be a
+    // slow-trickling backlog item and calibrate against a wrong value.
+    static const uint32_t kStaleNotificationThresholdSec = 120;
+    std::function<bool(int16_t&)> manualUtcOffsetFn;
+    bool utcOffsetKnown = false;
+    int32_t utcOffsetSeconds = 0;
+    int32_t pendingOffsetCandidate = 0;
+    uint8_t pendingOffsetStreak = 0;
+
+    // True if `rawDate` (an ANCS Date attribute) indicates the notification is
+    // older than kStaleNotificationThresholdSec. Returns false (i.e. "not
+    // stale, let it through") whenever the age can't be determined yet — no
+    // Date attribute, clock not NTP-synced, or no trusted UTC offset yet —
+    // so this only ever adds filtering on top of the connect-timing window,
+    // never removes the safety net of forwarding when unsure.
+    bool isStaleNotification(const String& rawDate) {
+        time_t naiveEpoch = parseAncsDateNaive(rawDate);
+        if (naiveEpoch == 0) return false;
+
+        time_t now = time(nullptr);
+        static const time_t kMinPlausibleEpoch = 1700000000; // 2023-11-14, guards an unsynced clock
+        if (now <= kMinPlausibleEpoch) return false;
+
+        int16_t manualMinutes;
+        if (manualUtcOffsetFn && manualUtcOffsetFn(manualMinutes)) {
+            utcOffsetSeconds = (int32_t)manualMinutes * 60;
+            utcOffsetKnown = true;
+        } else if (!utcOffsetKnown) {
+            int32_t candidate = (int32_t)(naiveEpoch - now);
+            static const int32_t kMinOffsetSec = -12 * 3600;
+            static const int32_t kMaxOffsetSec = 14 * 3600;
+            if (candidate >= kMinOffsetSec && candidate <= kMaxOffsetSec) {
+                int32_t quantized = ((candidate + (candidate >= 0 ? 450 : -450)) / 900) * 900;
+                if (pendingOffsetStreak > 0 && quantized == pendingOffsetCandidate) {
+                    utcOffsetSeconds = quantized;
+                    utcOffsetKnown = true;
+                    Serial.printf("[ANCS] Auto-calibrated phone UTC offset: %ld min\n",
+                                  (long)(utcOffsetSeconds / 60));
+                } else {
+                    pendingOffsetCandidate = quantized;
+                    pendingOffsetStreak = 1;
+                }
+            }
+        }
+
+        if (!utcOffsetKnown) return false;
+
+        time_t realCreatedUtc = naiveEpoch - utcOffsetSeconds;
+        time_t ageSec = now - realCreatedUtc;
+        return ageSec > (time_t)kStaleNotificationThresholdSec;
+    }
 
     NotificationCallback onNotification;
     NimBLEServer* server = nullptr;
