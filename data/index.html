@@ -256,7 +256,8 @@
       <div class="chip-list" id="templateChips">
         <button class="chip" type="button" data-token="{app}" title="App name, e.g. Teams">{app}</button>
         <button class="chip" type="button" data-token="{title}" title="Notification title (falls back to the app name if empty)">{title}</button>
-        <button class="chip" type="button" data-token="{body}" title="Notification body">{body}</button>
+        <button class="chip" type="button" data-token="{body}" title="Notification body, trimmed to a 128-char preview">{body}</button>
+        <button class="chip" type="button" data-token="{longBody}" title="Full notification body, up to 1024 chars">{longBody}</button>
         <button class="chip" type="button" data-token="{date}" title="Date forwarded, YYYY-MM-DD">{date}</button>
         <button class="chip" type="button" data-token="{time}" title="Time forwarded, HH:MM:SS">{time}</button>
         <button class="chip" type="button" data-token="{datetime}" title="Date and time forwarded combined">{datetime}</button>

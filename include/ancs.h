@@ -59,7 +59,14 @@ enum AncsNotificationAttributeId : uint8_t {
 };
 
 static const uint16_t ANCS_MAX_TITLE_LEN = 32;
-static const uint16_t ANCS_MAX_MESSAGE_LEN = 128;
+// Full message length requested from ANCS — backs Notification::bodyLong and the
+// {longBody} template token. Deliberately large; the phone truncates to this and
+// sets a "truncated" flag we ignore.
+static const uint16_t ANCS_MAX_MESSAGE_LEN = 1024;
+// Short preview length. Notification::body (and therefore {body} plus every
+// provider's default formatting) is capped here so ordinary pushes and Bark URL
+// paths stay small; {longBody} is the opt-in way to get the full text.
+static const uint16_t ANCS_SHORT_MESSAGE_LEN = 128;
 
 // Derives a readable app name from a reverse-DNS bundle identifier when it is
 // not in the well-known map, e.g. "com.microsoft.Office.Outlook" -> "Outlook",
@@ -506,7 +513,10 @@ private:
         n.appId = appId;
         n.appName = ancsFriendlyAppName(appId);
         n.title = title;
-        n.body = message;
+        n.body = message.length() > ANCS_SHORT_MESSAGE_LEN
+                     ? message.substring(0, ANCS_SHORT_MESSAGE_LEN)
+                     : message;
+        n.bodyLong = message;
         n.sourceDate = date;
 
         dataSourceBuffer.clear();

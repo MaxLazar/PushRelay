@@ -15,7 +15,8 @@ struct Notification {
     String appId;   // raw bundle ID, e.g. "com.microsoft.teams"
     String appName; // human-readable, e.g. "Teams"
     String title;
-    String body;
+    String body;     // short preview, capped at ANCS_SHORT_MESSAGE_LEN (see ancs.h)
+    String bodyLong; // full message, up to ANCS_MAX_MESSAGE_LEN; backs {longBody}
     uint32_t uid;      // ANCS notification UID, used for dedup in Phase 2
     // Raw ANCS Date attribute: "YYYYMMDD'T'HHMMSS" (ISO 8601 basic format),
     // the phone's local time when the notification was originally created —
@@ -75,6 +76,7 @@ inline String renderMessageTemplate(const String& tmpl, const Notification& n, c
     out.replace("{app}", n.appName);
     out.replace("{title}", n.title.isEmpty() ? n.appName : n.title);
     out.replace("{body}", n.body);
+    out.replace("{longBody}", n.bodyLong.isEmpty() ? n.body : n.bodyLong);
     out.replace("{priority}", priority);
     out.replace("{uid}", String(n.uid));
     out.replace("{date}", dateBuf);

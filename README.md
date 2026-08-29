@@ -321,8 +321,9 @@ and one global broker covers the realistic use case.
 **Home** tab has a **Firmware update** card:
 
 1. Click **Check for updates**. The device fetches
-   [`manifest.json`](https://maxlazar.github.io/PushRelay/manifest.json) from
-   GitHub Pages and compares its version with the running firmware.
+   [`update.json`](https://maxlazar.github.io/PushRelay/update.json) from
+   GitHub Pages and compares its version with the running firmware. (The web
+   flasher uses a separate `install.json` — different schema, same directory.)
 2. If a newer version is published, click **Install v*x.y.z***. The device
    streams the new firmware (and the admin-page filesystem image) straight
    into its spare OTA slot, verifies each against the SHA-256 in the manifest,
@@ -364,8 +365,9 @@ Every push to `main` that touches firmware/filesystem sources
 runs the [`Web Flasher` workflow](.github/workflows/flasher.yml), which:
 
 - rebuilds the Pages site + web flasher,
-- publishes `firmware.bin`, `littlefs.bin` and `manifest.json` to GitHub Pages
-  (this is what the admin-UI updater reads), and
+- publishes `firmware.bin`, `littlefs.bin` and `update.json` to GitHub Pages
+  (this is what the admin-UI updater reads; also mirrored to `manifest.json`
+  for devices on older firmware), and
 - creates a `v*x.y.z*` GitHub Release with the same files attached as an
   immutable archive.
 
@@ -496,7 +498,8 @@ built out of `{token}` placeholders:
 | --- | --- |
 | `{app}` | App name, e.g. `Teams` |
 | `{title}` | Notification title (falls back to the app name if empty) |
-| `{body}` | Notification body |
+| `{body}` | Notification body, trimmed to a 128-char preview |
+| `{longBody}` | Full notification body, up to 1024 chars (ANCS may truncate longer) |
 | `{date}` | Date the notification was forwarded, `YYYY-MM-DD` |
 | `{time}` | Time the notification was forwarded, `HH:MM:SS` |
 | `{datetime}` | `{date}` and `{time}` combined |

@@ -91,6 +91,11 @@ jobs:
           cp "$(find ~/.platformio -name boot_app0.bin | head -1)" site/
           ls -la site/
 
+      # The OTA manifest and the esp-web-tools flasher manifest have different
+      # schemas and must not collide. The flasher one ships in the repo as
+      # web/install.json (copied to site/ above); the OTA one is generated here
+      # as site/update.json. A copy is also written to site/manifest.json for
+      # devices still on firmware that fetches the old OTA_MANIFEST_URL.
       - name: Build update manifest
         run: |
           set -e
@@ -107,8 +112,9 @@ jobs:
             '{version:$version, sha:$sha, date:$date, notes:$notes, min_version:"0.0.0",
               firmware:{path:"firmware.bin", sha256:$fw_sha, size:$fw_size},
               filesystem:{path:"littlefs.bin", sha256:$fs_sha, size:$fs_size}}' \
-            > site/manifest.json
-          cat site/manifest.json
+            > site/update.json
+          cp site/update.json site/manifest.json
+          cat site/update.json
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
@@ -129,6 +135,7 @@ jobs:
 
             ${{ github.event.head_commit.message }}
           files: |
+            site/update.json
             site/manifest.json
             site/bootloader.bin
             site/partitions.bin

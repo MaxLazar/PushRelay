@@ -3,7 +3,7 @@
 #pragma once
 
 #define APP_NAME      "PushRelay"
-#define APP_VERSION   "0.5"
+#define APP_VERSION   "0.6"
 #define APP_AUTHOR    "Oleg Abramov"
 #define APP_EMAIL     "oleg@abramov.dev"
 #define MDNS_HOSTNAME "pushrelay" // http://pushrelay.local
@@ -17,8 +17,10 @@
 // Pages is used instead of the GitHub API so there is no rate limit and no
 // cross-host redirect; image integrity is checked with the SHA-256 in the
 // manifest, so a plain TLS connection (no pinned CA) is acceptable here.
+// NB: this is the OTA manifest (update.json). The esp-web-tools web flasher
+// uses a separate install.json with a different schema.
 #define OTA_BASE_URL     "https://maxlazar.github.io/PushRelay/"
-#define OTA_MANIFEST_URL OTA_BASE_URL "manifest.json"
+#define OTA_MANIFEST_URL OTA_BASE_URL "update.json"
 
 // WiFiManager captive-portal AP name used on first boot / lost credentials.
 #define WIFI_SETUP_AP_NAME "PushRelay-Setup"
